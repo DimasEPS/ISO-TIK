@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useCallback } from "react"
-import { SearchIcon, Plus, Eye, FilePen, FileText, FileDown, Trash2, Loader2 } from "lucide-react"
+import { SearchIcon, Plus, Eye, FilePen, FileText, Download, Trash2, Loader2 } from "lucide-react"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Button } from "@/components/ui/button"
 import { useAdminLayout } from "@/layouts/admin/AdminLayoutContext"
@@ -195,7 +195,7 @@ export default function NCR() {
                   {generatingNCRId === ncr.id ? (
                     <Loader2 className="h-5 w-5 animate-spin text-[#2B7FFF]" />
                   ) : (
-                    <FileDown className="h-5 w-5 text-[#f0b100]" />
+                    <Download className="h-5 w-5 text-[#f0b100]" />
                   )}
                 </button>
                 <button
