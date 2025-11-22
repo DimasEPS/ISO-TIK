@@ -477,9 +477,9 @@ function LegendBar() {
   ]
 
   return (
-    <div className="rounded-lg border border-blue-500 bg-[#EAF2FF] px-5 py-3 text-xs text-blue-700">
-      <p className="font-semibold mb-2">Keterangan:</p>
-      <div className="flex flex-wrap gap-x-6 gap-y-1 text-[11px]">
+    <div className="rounded-[4px] border border-blue-500 bg-[#EAF2FF] p-4 text-xs text-blue-700">
+      <p className="body-medium text-navy-active mb-2">Keterangan:</p>
+      <div className="flex flex-wrap gap-x-6 gap-y-1 small-medium">
         {entries.map((item) => (
           <span key={item}>{item}</span>
         ))}
