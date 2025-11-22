@@ -92,10 +92,10 @@ export function OverlayForm({
       type="button"
       className={
         isQuestionVariant
-          ? "h-14 gap-2 bg-navy px-6 text-white hover:bg-navy-hover"
+          ? "h-14 gap-2 bg-navy px-6 text-white hover:bg-navy-hover w-[203px]"
           : isCategoryVariant
-          ? "h-14 gap-2 bg-navy px-6 text-white hover:bg-navy-hover"
-          : "bg-navy text-gray-light hover:bg-navy-hover h-14 w-[223px]"
+          ? "h-14 gap-2 bg-navy px-6 text-white hover:bg-navy-hover w-[203px]"
+          : "bg-navy text-gray-light hover:bg-navy-hover h-14 w-[203px]"
       }
     >
       <Plus className="h-5 w-5" /> {triggerLabel ?? (isQuestionVariant ? "Tambah Pertanyaan" : "Tambah Dokumen SoA")}
