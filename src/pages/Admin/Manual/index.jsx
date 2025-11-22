@@ -18,8 +18,8 @@ export default function Manual() {
 
   useEffect(() => {
     setHeader({
-      title: "Manual",
-      subtitle: "Kelola dokumen manual dan klausa pendukung",
+      title: "Checklist Manual",
+      subtitle: "Kelola dokumen dan pertanyaan",
       user: {
         name: "Admin User",
         role: "Administrator",
