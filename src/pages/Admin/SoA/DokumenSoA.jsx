@@ -1,8 +1,11 @@
-import { Download, FilePen, FileText, Trash2, Eye } from "lucide-react"
+import { useCallback, useMemo, useState } from "react"
+import { Download, FilePen, FileText, Trash2, Eye, Loader2 } from "lucide-react"
 import { PaginateControls, SearchBar, StatusDropdown, Table as AdminTable } from "@/components/admin/table"
 import { AlertIconDialog } from "@/components/admin/soa/AlertIconDialog"
 import { OverlayForm } from "@/components/admin/soa/OverlayForm"
 import { useSoADocuments } from "./hooks/useSoADocuments"
+import { PDFPreviewDialog } from "@/generatePDF/components"
+import { downloadSoAReviewPDF, getSoAReviewPDFPreview } from "@/generatePDF/generators"
 const FILTER_OPTIONS = [
   { value: "Semua Status" },
   { value: "Draft" },
@@ -21,7 +24,7 @@ const STATUS_STYLES = {
   Approved: "bg-green-light text-green border border-[#BDECCB] shadow-sm small",
 }
 
-const SOA_COLUMNS = [
+const buildSoAColumns = ({ onPreview, onDownload, downloadingId }) => [
   {
     key: "noDoc",
     header: "No Dokumen",
@@ -105,8 +108,23 @@ const SOA_COLUMNS = [
             </button>
           )}
         />
-        <FileText className="text-[#00C950] w-5 h-5 cursor-pointer" />
-        <Download className="text-[#F1C441] w-5 h-5 cursor-pointer" />
+        <button type="button" onClick={() => onPreview?.(row)} title="Pratinjau PDF" aria-label="Pratinjau PDF Dokumen">
+          <FileText className="text-[#00C950] w-5 h-5 cursor-pointer" />
+        </button>
+        <button
+          type="button"
+          onClick={() => onDownload?.(row)}
+          title="Unduh PDF"
+          aria-label="Unduh PDF Dokumen"
+          disabled={downloadingId === row.noDoc}
+          className="disabled:opacity-60"
+        >
+          {downloadingId === row.noDoc ? (
+            <Loader2 className="text-[#F1C441] w-5 h-5 animate-spin" />
+          ) : (
+            <Download className="text-[#F1C441] w-5 h-5 cursor-pointer" />
+          )}
+        </button>
         <AlertIconDialog
           type="delete"
           row={row}
@@ -139,10 +157,48 @@ export default function DokumenSoA() {
     totalPages,
     handlePaginateChange,
   } = useSoADocuments()
+  const [isPreviewOpen, setIsPreviewOpen] = useState(false)
+  const [previewDoc, setPreviewDoc] = useState(null)
+  const [downloadingDocId, setDownloadingDocId] = useState(null)
 
+  const handlePreview = useCallback((row) => {
+    setPreviewDoc(row)
+    setIsPreviewOpen(true)
+  }, [])
+
+  const handleDownload = useCallback(async (row) => {
+    if (!row) return
+    setDownloadingDocId(row.noDoc)
+    try {
+      await downloadSoAReviewPDF(row, {
+        filename: `review-soa-${(row.noDoc || row.judul || "dokumen").replace(/\s+/g, "-").toLowerCase()}.pdf`,
+      })
+    } catch (error) {
+      console.error("Gagal mengunduh PDF SoA", error)
+    } finally {
+      setDownloadingDocId(null)
+    }
+  }, [])
+
+  const handleClosePreview = useCallback((open) => {
+    setIsPreviewOpen(open)
+    if (!open) {
+      setPreviewDoc(null)
+    }
+  }, [])
+
+  const previewBuilder = useCallback(async () => {
+    if (!previewDoc) return null
+    return getSoAReviewPDFPreview(previewDoc)
+  }, [previewDoc])
+
+  const columns = useMemo(
+    () => buildSoAColumns({ onPreview: handlePreview, onDownload: handleDownload, downloadingId: downloadingDocId }),
+    [handlePreview, handleDownload, downloadingDocId],
+  )
   return (
     <div className="flex flex-wrap items-center gap-4">
-      <SearchBar />
+      <SearchBar className="w-[1093px]" />
 
       <StatusDropdown
         isMenuOpen={isFilterDropdownOpen}
@@ -155,6 +211,7 @@ export default function DokumenSoA() {
       />
 
       <OverlayForm
+      className="w-[23px]!"
         isStatusDropdownOpen={isModalDropdownOpen}
         setIsStatusDropdownOpen={setIsModalDropdownOpen}
         statusValue={modalStatus}
@@ -164,7 +221,7 @@ export default function DokumenSoA() {
       <AdminTable
         className="bg-white"
         tableClassName="min-w-[900px]"
-        columns={SOA_COLUMNS}
+        columns={columns}
         data={pagedData}
         getRowKey={(row) => `${row.noDoc}-${row.revisi}`}
       />
@@ -178,6 +235,24 @@ export default function DokumenSoA() {
         onPageChange={setActivePage}
         totalPages={totalPages}
         totalData={totalData}
+      />
+
+      <PDFPreviewDialog
+        open={isPreviewOpen}
+        onOpenChange={handleClosePreview}
+        title={previewDoc?.judul ? `Pratinjau Review SoA • ${previewDoc.judul}` : "Pratinjau Review SoA"}
+        previewBuilder={previewDoc ? previewBuilder : null}
+        onDownload={
+          previewDoc
+            ? async () => {
+                await downloadSoAReviewPDF(previewDoc, {
+                  filename: `review-soa-${(previewDoc.noDoc || previewDoc.judul || "dokumen")
+                    .replace(/\s+/g, "-")
+                    .toLowerCase()}.pdf`,
+                })
+              }
+            : null
+        }
       />
     </div>
   )

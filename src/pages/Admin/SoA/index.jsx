@@ -66,7 +66,7 @@ export default function SoA(){
                 </div>
             )}
         
-            <div className="">
+            <div className="py-4">
                 <Outlet />
             </div>
         </div>
