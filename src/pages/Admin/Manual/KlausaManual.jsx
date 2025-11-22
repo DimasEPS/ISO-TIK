@@ -34,7 +34,7 @@ const CLAUSES = [
   },
 ];
 
-export default function ManualChecklist() {
+export default function KlausaManual() {
   const [search, setSearch] = useState("");
 
   const filteredClauses = useMemo(() => {

@@ -32,7 +32,7 @@ import ReviewPertanyaanExcel from "@/pages/Admin/Audit/ReviewPertanyaanExcel";
 import ReviewJawabanSoA from "@/pages/Admin/SoA/ReviewJawabanSoA";
 import Manual from "@/pages/Admin/Manual";
 import ManualDocuments from "@/pages/Admin/Manual/ManualDocuments";
-import ManualChecklist from "@/pages/Admin/Manual/ManualChecklist";
+import KlausaManual from "@/pages/Admin/Manual/KlausaManual";
 import ManajemenPengguna from "@/pages/Admin/ManajemenPengguna";
 import Profil from "@/pages/Profil";
 
@@ -83,7 +83,7 @@ const router = createBrowserRouter([
         children: [
           { index: true, element: <ManualDocuments /> },
           { path: "dokumen", element: <ManualDocuments /> },
-          { path: "klausa", element: <ManualChecklist /> },
+          { path: "klausa", element: <KlausaManual /> },
         ],
       },
       { path: "dokumen", element: <DokumenPage /> },
