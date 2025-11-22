@@ -52,3 +52,12 @@ If you are developing a production application, we recommend using TypeScript wi
 4. Dari direktori proyek, bangun dan jalankan container: `docker compose up --build` (atau `docker compose up -d` untuk background).
 5. Setelah log Nginx muncul, akses aplikasi di `http://localhost/`.
 6. Hentikan layanan dengan `Ctrl+C` atau `docker compose down` jika memakai mode `-d`.
+
+## Menjalankan di Windows dengan Docker Compose
+
+1. Unduh dan instal [Docker Desktop](https://www.docker.com/products/docker-desktop/) lalu pastikan Compose v2 aktif.
+2. Jalankan Docker Desktop hingga status daemon “Running”.
+3. Buka PowerShell atau CMD pada direktori proyek ini.
+4. Eksekusi `docker compose up --build` (atau `docker compose up -d` untuk background).
+5. Setelah log Nginx muncul, akses aplikasi di `http://localhost/`.
+6. Hentikan container dengan `Ctrl+C` atau `docker compose down` (jika menjalankan mode `-d`).
