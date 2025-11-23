@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
-import { useAdminLayout } from "@/layouts/admin/AdminLayoutContext";
+import { usePageTemplate } from "@/hooks/usePageTemplate";
 import { useAuth } from "@/auth/context/AuthContext";
 import {
   ProfileCard,
@@ -79,9 +79,7 @@ const mapPasswordFieldErrors = (errors = {}) => {
 };
 
 export default function Profil() {
-  const { setHeader } = useAdminLayout();
   const { token, updateUserInfo } = useAuth();
-  
   const [userData, setUserData] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState(null);
@@ -92,6 +90,15 @@ export default function Profil() {
   const [profileFieldErrors, setProfileFieldErrors] = useState({});
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordFieldErrors, setPasswordFieldErrors] = useState({});
+  usePageTemplate({
+    title: "Profile Saya",
+    subtitle: "Kelola informasi pribadi dan preferensi akun Anda",
+    user: {
+      name: userData?.nama || "Pengguna",
+      role: userData?.roles?.[0] || "User",
+      urlDetail: "/admin/profil",
+    },
+  });
 
   const {
     data: activityLogs,
@@ -119,18 +126,6 @@ export default function Profil() {
       setProfileLoading(false);
     }
   }, [token]);
-
-  useEffect(() => {
-    setHeader({
-      title: "Profile Saya",
-      subtitle: "Kelola informasi pribadi dan preferensi akun Anda",
-      user: {
-        name: userData?.nama || "Pengguna",
-        role: userData?.roles?.[0] || "User",
-        urlDetail: "/admin/profil",
-      },
-    });
-  }, [setHeader, userData]);
 
   useEffect(() => {
     fetchProfile();

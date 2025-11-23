@@ -6,7 +6,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
-import { PaginationControls } from "@/pages/Admin/NCR/components/common";
+import { PaginationControls } from "@/pages/ncr/components/common";
 
 /**
  * Reusable Activity Log Table Component

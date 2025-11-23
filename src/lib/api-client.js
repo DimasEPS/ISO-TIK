@@ -15,6 +15,16 @@ const resolveTimezone = () => {
   }
 };
 
+const getPersistedToken = () => {
+  if (typeof localStorage === "undefined") return null;
+  try {
+    return localStorage.getItem("iso_tik_token");
+  } catch (error) {
+    console.warn("Failed to read auth token from storage", error);
+    return null;
+  }
+};
+
 const isFormData = (value) =>
   typeof FormData !== "undefined" && value instanceof FormData;
 
@@ -74,8 +84,9 @@ export const apiClient = async (path, options = {}) => {
     ...rest,
   };
 
-  if (token) {
-    config.headers.Authorization = `Bearer ${token}`;
+  const effectiveToken = token ?? getPersistedToken();
+  if (effectiveToken) {
+    config.headers.Authorization = `Bearer ${effectiveToken}`;
   }
 
   if (data !== undefined && data !== null) {

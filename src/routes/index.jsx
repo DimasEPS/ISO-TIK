@@ -1,39 +1,39 @@
 // src/routes/index.jsx
 import { createBrowserRouter, Navigate } from "react-router-dom";
 import { ProtectedRoute } from "@/auth/components/ProtectedRoute";
-import { AdminLayout } from "@/layouts/admin";
+import { AppLayout } from "@/layouts";
 import { LoginPage } from "@/pages/Auth";
-import DashboardPage from "@/pages/Admin/Dashboard";
-import DokumenPage from "@/pages/Admin/Dokumen";
+import DashboardPage from "@/pages/dashboard";
+import DokumenPage from "@/pages/documents";
 import NotFoundPage from "@/pages/NotFound";
-import DokumenSoA from "@/pages/Admin/SoA/DokumenSoA";
-import SoA from "@/pages/Admin/SoA";
-import KategoriSoA from "@/pages/Admin/SoA/KategoriSoA";
-import PertanyaanSoA from "@/pages/Admin/SoA/PertanyaanSoA";
-import NCR from "@/pages/Admin/NCR";
-import CaseListPage from "@/pages/Admin/NCR/CaseListPage";
-import CaseDetailPage from "@/pages/Admin/NCR/CaseDetailPage";
-import FindingsListPage from "@/pages/Admin/NCR/FindingsListPage";
-import ResponsePage from "@/pages/Admin/NCR/ResponsePage";
-import Audit from "@/pages/Admin/Audit";
-import DokumenAudit from "@/pages/Admin/Audit/DokumenAudit";
-import AspekAudit from "@/pages/Admin/Audit/AspekAudit";
-import ChecklistAudit from "@/pages/Admin/Audit/ChekclistAudit";
-import ChecklistExcel from "@/pages/Admin/Audit/ChecklistExcel";
-import KategoriPertanyaan from "@/pages/Admin/Audit/KategoriPertanyaan";
-import PertanyaanAudit from "@/pages/Admin/Audit/PertanyaanAudit";
-import ItemAudit from "@/pages/Admin/Audit/ItemAudit";
-import DaftarChecklist from "@/pages/Admin/Audit/DaftarChecklist";
-import AspekPertanyaan from "@/pages/Admin/Audit/AspekPertanyaan";
-import PertanyaanExcel from "@/pages/Admin/Audit/PertanyaanExcel";
-import ReviewAspekPertanyaan from "@/pages/Admin/Audit/ReviewAspekPertanyaan";
-import ReviewPertanyaanExcel from "@/pages/Admin/Audit/ReviewPertanyaanExcel";
+import DokumenSoA from "@/pages/soa/DokumenSoA";
+import SoA from "@/pages/soa";
+import KategoriSoA from "@/pages/soa/KategoriSoA";
+import PertanyaanSoA from "@/pages/soa/PertanyaanSoA";
+import NCR from "@/pages/ncr";
+import CaseListPage from "@/pages/ncr/CaseListPage";
+import CaseDetailPage from "@/pages/ncr/CaseDetailPage";
+import FindingsListPage from "@/pages/ncr/FindingsListPage";
+import ResponsePage from "@/pages/ncr/ResponsePage";
+import Audit from "@/pages/audit";
+import DokumenAudit from "@/pages/audit/DokumenAudit";
+import AspekAudit from "@/pages/audit/AspekAudit";
+import ChecklistAudit from "@/pages/audit/ChekclistAudit";
+import ChecklistExcel from "@/pages/audit/ChecklistExcel";
+import KategoriPertanyaan from "@/pages/audit/KategoriPertanyaan";
+import PertanyaanAudit from "@/pages/audit/PertanyaanAudit";
+import ItemAudit from "@/pages/audit/ItemAudit";
+import DaftarChecklist from "@/pages/audit/DaftarChecklist";
+import AspekPertanyaan from "@/pages/audit/AspekPertanyaan";
+import PertanyaanExcel from "@/pages/audit/PertanyaanExcel";
+import ReviewAspekPertanyaan from "@/pages/audit/ReviewAspekPertanyaan";
+import ReviewPertanyaanExcel from "@/pages/audit/ReviewPertanyaanExcel";
 
-import ReviewJawabanSoA from "@/pages/Admin/SoA/ReviewJawabanSoA";
-import Manual from "@/pages/Admin/Manual";
-import ManualDocuments from "@/pages/Admin/Manual/ManualDocuments";
-import KlausaManual from "@/pages/Admin/Manual/KlausaManual";
-import ManajemenPengguna from "@/pages/Admin/ManajemenPengguna";
+import ReviewJawabanSoA from "@/pages/soa/ReviewJawabanSoA";
+import Manual from "@/pages/manual";
+import ManualDocuments from "@/pages/manual/ManualDocuments";
+import KlausaManual from "@/pages/manual/KlausaManual";
+import ManajemenPengguna from "@/pages/user-management";
 import Profil from "@/pages/Profil";
 
 const router = createBrowserRouter([
@@ -49,7 +49,7 @@ const router = createBrowserRouter([
     path: "/admin",
     element: (
       <ProtectedRoute>
-        <AdminLayout />
+        <AppLayout />
       </ProtectedRoute>
     ),
     children: [

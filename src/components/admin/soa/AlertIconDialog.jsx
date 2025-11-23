@@ -181,14 +181,14 @@ export function AlertIconDialog({ type, row, className = "", trigger }) {
                 <Input
                   value={formData.noDoc}
                   onChange={handleChange("noDoc")}
-                  className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0"
+                  className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0 h-12"
                 />
               </FormField>
               <FormField label="Tanggal Terbit">
                 <Input
                   value={formData.tanggalTerbit}
                   onChange={handleChange("tanggalTerbit")}
-                  className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0"
+                  className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0 h-12"
                 />
               </FormField>
             </div>
@@ -196,49 +196,49 @@ export function AlertIconDialog({ type, row, className = "", trigger }) {
               <Input
                 value={formData.judul}
                 onChange={handleChange("judul")}
-                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0"
+                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0 h-12"
               />
             </FormField>
             <FormField label="Revisi">
               <Input
                 value={formData.revisi}
                 onChange={handleChange("revisi")}
-                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0"
+                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0 h-12"
               />
             </FormField>
             <FormField label="Klasifikasi">
               <Input
                 value={formData.klasifikasi}
                 onChange={handleChange("klasifikasi")}
-                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0"
+                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0 h-12"
               />
             </FormField>
             <FormField label="Penyusun">
               <Input
                 value={formData.penyusun}
                 onChange={handleChange("penyusun")}
-                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0"
+                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0 h-12"
               />
             </FormField>
             <FormField label="Ketua ISO">
               <Input
                 value={formData.ketuaIso}
                 onChange={handleChange("ketuaIso")}
-                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0"
+                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0 h-12"
               />
             </FormField>
             <FormField label="Direktur">
               <Input
                 value={formData.direktur}
                 onChange={handleChange("direktur")}
-                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0"
+                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0 h-12"
               />
             </FormField>
             <FormField label="Status">
               <select
                 value={formData.status}
                 onChange={handleChange("status")}
-                className="bg-state w-full text-center text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:outline-none h-12 rounded-md px-3"
+                className="bg-state w-full text-center text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:outline-none h-12 rounded-md px-3 h-12"
               >
                 <option value="Draft">Draft</option>
                 <option value="In Progress">In Progress</option>
