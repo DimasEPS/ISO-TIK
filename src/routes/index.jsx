@@ -33,6 +33,8 @@ import ReviewJawabanSoA from "@/pages/Admin/SoA/ReviewJawabanSoA";
 import Manual from "@/pages/Admin/Manual";
 import ManualDocuments from "@/pages/Admin/Manual/ManualDocuments";
 import KlausaManual from "@/pages/Admin/Manual/KlausaManual";
+import SubKlausa from "@/pages/Admin/Manual/SubKlausa";
+import PertanyaanManual from "@/pages/Admin/Manual/PertanyaanManual";
 import ManajemenPengguna from "@/pages/Admin/ManajemenPengguna";
 import Profil from "@/pages/Profil";
 
@@ -86,6 +88,8 @@ const router = createBrowserRouter([
           { path: "klausa", element: <KlausaManual /> },
         ],
       },
+      { path: "manual/klausa/:clauseId/sub", element: <SubKlausa /> },
+      { path: "manual/klausa/:clauseId/pertanyaan", element: <PertanyaanManual /> },
       { path: "dokumen", element: <DokumenPage /> },
       { path: "ncr", element: <NCR /> },
       { path: "ncr/:id/kasus", element: <CaseListPage /> },
