@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, FilePen } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,16 +25,131 @@ const subtitleMap = {
   edit: "Ubah informasi dokumen audit sesuai kebutuhan",
 };
 
-export function AlertIconDialog({ type, row, className = "" }) {
+export function AlertIconDialog({
+  type,
+  row,
+  onUpdate,
+  isUpdating,
+  className = "",
+}) {
   const [open, setOpen] = useState(false);
+  const [formData, setFormData] = useState({
+    judul: row.judul || "",
+    lokasi: row.lokasi || "",
+    tanggalAudit: row.tanggalAudit || "",
+    leadAuditor: row.leadAuditor || "",
+    auditor: row.auditor || "",
+    revisi: row.revisi || "",
+    status: row.status || "Draft",
+  });
   const navigate = useNavigate();
   const readOnly = type === "view";
 
-  const handleSubmit = (e) => {
+  const handleInputChange = (field, value) => {
+    setFormData((prev) => ({ ...prev, [field]: value }));
+  };
+
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    // Handle form submission here
-    console.log("Form submitted");
-    setOpen(false);
+
+    if (!onUpdate) {
+      setOpen(false);
+      return;
+    }
+
+    // Validation - title, revision, status are required by backend
+    if (!formData.judul?.trim()) {
+      toast.error("Judul wajib diisi!");
+      return;
+    }
+
+    if (!formData.revisi?.trim()) {
+      toast.error("Revisi wajib diisi!", {
+        description: "Format: angka.angka (contoh: 1.0, 2.1, 3.0)",
+      });
+      return;
+    }
+
+    // Validate revision format
+    const revisionPattern = /^\d+(\.\d+)?$/;
+    if (!revisionPattern.test(formData.revisi.trim())) {
+      toast.error("Format Revisi tidak valid!", {
+        description: "Gunakan format angka seperti: 1.0, 1.1, 2.0, dst.",
+      });
+      return;
+    }
+
+    // Convert tanggal format if needed (dd/mm/yyyy -> yyyy-mm-dd)
+    let auditDate = formData.tanggalAudit;
+    if (auditDate && auditDate.includes("/")) {
+      const dateMatch = auditDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      if (dateMatch) {
+        const [, day, month, year] = dateMatch;
+        auditDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+      } else {
+        toast.warning("Format tanggal tidak valid", {
+          description: "Gunakan format dd/mm/yyyy (contoh: 15/12/2025)",
+        });
+        return;
+      }
+    }
+
+    // Map frontend fields to backend API - only required fields
+    const payload = {
+      title: formData.judul.trim(),
+      revision: formData.revisi.trim(),
+      status: mapStatusToBackend(formData.status),
+    };
+
+    // Add optional fields only if they have values
+    if (auditDate) {
+      payload.audit_period = auditDate;
+    }
+
+    if (formData.lokasi?.trim()) {
+      payload.location = formData.lokasi.trim();
+    }
+
+    if (formData.leadAuditor?.trim()) {
+      payload.lead_auditor = formData.leadAuditor.trim();
+    }
+
+    if (formData.auditor?.trim()) {
+      payload.auditor_name = formData.auditor.trim();
+    }
+
+    try {
+      await onUpdate({ documentId: row.id, payload });
+      
+      toast.success("Dokumen audit berhasil diupdate!", {
+        description: `Perubahan pada "${formData.judul}" telah disimpan`,
+      });
+      
+      setOpen(false);
+    } catch (error) {
+      const errorMsg = error?.data?.message || error?.message || "Unknown error";
+      const errorDetails = error?.data?.errors 
+        ? Object.entries(error.data.errors)
+            .map(([field, messages]) => `${field}: ${messages.join(", ")}`)
+            .join("\n")
+        : null;
+
+      toast.error("Gagal mengupdate dokumen", {
+        description: errorDetails || errorMsg,
+        duration: 7000,
+      });
+    }
+  };
+
+  // Map frontend status ke backend enum
+  const mapStatusToBackend = (status) => {
+    const statusMap = {
+      Draft: "draft",
+      "In Progress": "in_progress",
+      Reviewed: "reviewed",
+      Approved: "approved",
+    };
+    return statusMap[status] || status.toLowerCase().replace(" ", "_");
   };
 
   const handleNavigate = (mode) => {
@@ -147,12 +263,14 @@ export function AlertIconDialog({ type, row, className = "" }) {
           <form onSubmit={handleSubmit} className="space-y-4 py-2">
             <div className="space-y-2">
               <Label htmlFor="judul" className="text-sm text-navy">
-                Judul Dokumen
+                Judul Dokumen <span className="text-red-500">*</span>
               </Label>
               <Input
                 id="judul"
-                defaultValue={row.judul}
+                value={formData.judul}
+                onChange={(e) => handleInputChange("judul", e.target.value)}
                 className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy"
+                required
               />
             </div>
 
@@ -163,7 +281,8 @@ export function AlertIconDialog({ type, row, className = "" }) {
                 </Label>
                 <Input
                   id="lokasi"
-                  defaultValue={row.lokasi}
+                  value={formData.lokasi}
+                  onChange={(e) => handleInputChange("lokasi", e.target.value)}
                   className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy"
                 />
               </div>
@@ -173,9 +292,17 @@ export function AlertIconDialog({ type, row, className = "" }) {
                 </Label>
                 <Input
                   id="tanggalAudit"
-                  defaultValue={row.tanggalAudit}
+                  type="text"
+                  value={formData.tanggalAudit}
+                  onChange={(e) =>
+                    handleInputChange("tanggalAudit", e.target.value)
+                  }
                   className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy"
+                  placeholder="Contoh: 15/12/2025"
                 />
+                <p className="text-xs text-gray-500">
+                  Format: dd/mm/yyyy
+                </p>
               </div>
             </div>
 
@@ -186,7 +313,10 @@ export function AlertIconDialog({ type, row, className = "" }) {
                 </Label>
                 <Input
                   id="leadAuditor"
-                  defaultValue={row.leadAuditor}
+                  value={formData.leadAuditor}
+                  onChange={(e) =>
+                    handleInputChange("leadAuditor", e.target.value)
+                  }
                   className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy"
                 />
               </div>
@@ -196,7 +326,8 @@ export function AlertIconDialog({ type, row, className = "" }) {
                 </Label>
                 <Input
                   id="auditor"
-                  defaultValue={row.auditor}
+                  value={formData.auditor}
+                  onChange={(e) => handleInputChange("auditor", e.target.value)}
                   className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy"
                 />
               </div>
@@ -205,23 +336,35 @@ export function AlertIconDialog({ type, row, className = "" }) {
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="revisi" className="text-sm text-navy">
-                  Revisi
+                  Revisi <span className="text-red-500">*</span>
                 </Label>
                 <Input
                   id="revisi"
-                  defaultValue={row.revisi}
+                  value={formData.revisi}
+                  onChange={(e) => handleInputChange("revisi", e.target.value)}
                   className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy"
+                  required
+                  placeholder="Contoh: 1.0"
                 />
+                <p className="text-xs text-gray-500">
+                  Format: angka.angka (1.0, 2.1)
+                </p>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="status" className="text-sm text-navy">
                   Status
                 </Label>
-                <Input
+                <select
                   id="status"
-                  defaultValue={row.status}
-                  className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy"
-                />
+                  value={formData.status}
+                  onChange={(e) => handleInputChange("status", e.target.value)}
+                  className="flex h-10 w-full rounded-lg border border-input bg-state px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-gray-dark focus-visible:outline-none focus-visible:bg-gray-light focus-visible:border-2 focus-visible:border-navy disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  <option value="Draft">Draft</option>
+                  <option value="In Progress">In Progress</option>
+                  <option value="Reviewed">Reviewed</option>
+                  <option value="Approved">Approved</option>
+                </select>
               </div>
             </div>
 
@@ -233,9 +376,10 @@ export function AlertIconDialog({ type, row, className = "" }) {
               </DialogClose>
               <Button
                 type="submit"
-                className="rounded-lg bg-navy hover:bg-navy-hover"
+                disabled={isUpdating}
+                className="rounded-lg bg-navy hover:bg-navy-hover disabled:opacity-50"
               >
-                Simpan Perubahan
+                {isUpdating ? "Menyimpan..." : "Simpan Perubahan"}
               </Button>
             </DialogFooter>
           </form>

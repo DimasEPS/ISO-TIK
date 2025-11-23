@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Trash2, AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -13,18 +14,36 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 
-export function DeleteDialog({ row, className = "" }) {
+export function DeleteDialog({ row, onDelete, isDeleting, className = "" }) {
   const [open, setOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
-  const expectedText = "Checklist Audit";
+  const expectedText = row.judul || "Checklist Audit";
 
-  const handleDelete = (e) => {
+  const handleDelete = async (e) => {
     e.preventDefault();
     if (confirmText === expectedText) {
-      // Handle delete logic here
-      console.log("Deleting:", row);
-      setOpen(false);
-      setConfirmText("");
+      if (!onDelete) {
+        setOpen(false);
+        setConfirmText("");
+        return;
+      }
+
+      try {
+        await onDelete(row.id);
+        
+        toast.success("Dokumen audit berhasil dihapus!", {
+          description: `Dokumen "${expectedText}" telah dihapus`,
+        });
+        
+        setOpen(false);
+        setConfirmText("");
+      } catch (error) {
+        const errorMsg = error?.data?.message || error?.message || "Unknown error";
+        toast.error("Gagal menghapus dokumen", {
+          description: errorMsg,
+          duration: 7000,
+        });
+      }
     }
   };
 
@@ -76,7 +95,7 @@ export function DeleteDialog({ row, className = "" }) {
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
                 placeholder="Masukkan judul dokumen"
-                className="rounded-[4px] bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy"
+                className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy"
               />
             </div>
 
@@ -85,7 +104,7 @@ export function DeleteDialog({ row, className = "" }) {
                 <Button
                   type="button"
                   variant="outline"
-                  className="rounded-[4px]"
+                  className="rounded-lg"
                   onClick={() => setConfirmText("")}
                 >
                   Batal
@@ -93,10 +112,10 @@ export function DeleteDialog({ row, className = "" }) {
               </DialogClose>
               <Button
                 type="submit"
-                disabled={confirmText !== expectedText}
-                className="rounded-[4px] bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+                disabled={confirmText !== expectedText || isDeleting}
+                className="rounded-lg bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Hapus Dokumen
+                {isDeleting ? "Menghapus..." : "Hapus Dokumen"}
               </Button>
             </DialogFooter>
           </form>
