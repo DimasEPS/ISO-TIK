@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -17,27 +17,35 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Trash2 } from "lucide-react";
+import { useUserRoles } from "@/hooks/useUserManagement";
 
-const AVAILABLE_ROLES = ["Admin", "Auditor", "Reviewer", "Approver", "Direktur", "Manager"];
-const STATUS_OPTIONS = ["Aktif", "Menunggu", "Nonaktif"];
+const STATUS_OPTIONS = [
+  { value: "active", label: "Aktif" },
+  { value: "inactive", label: "Nonaktif" },
+];
 
 /**
  * Modal untuk menambah user baru
+ * Backend API schema requires: first_name, last_name, username, email, password, password_confirmation, status, role_ids[]
  */
 export function AddUserModal({ isOpen, onClose, onSave }) {
   const [formData, setFormData] = useState({
-    fullName: "",
-    lastName: "",
+    first_name: "",
+    last_name: "",
     username: "",
     email: "",
-    status: "Aktif",
+    status: "active",
     password: "",
-    confirmPassword: "",
+    password_confirmation: "",
   });
 
-  const [roles, setRoles] = useState([]);
-  const [selectedRole, setSelectedRole] = useState("");
+  const [selectedRoles, setSelectedRoles] = useState([]); // Array of { id: uuid, name: string }
+  const [selectedRoleId, setSelectedRoleId] = useState("");
   const [errors, setErrors] = useState({});
+
+  // Fetch available roles from API
+  const { data: rolesResponse, isLoading: isLoadingRoles } = useUserRoles()
+  const availableRoles = rolesResponse?.data ?? []
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
@@ -47,34 +55,40 @@ export function AddUserModal({ isOpen, onClose, onSave }) {
   };
 
   const handleAddRole = () => {
-    if (selectedRole && !roles.some(r => r.name === selectedRole)) {
-      const newRole = {
-        id: Date.now(),
-        name: selectedRole,
-        dateAdded: new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })
-      };
-      setRoles([...roles, newRole]);
-      setSelectedRole("");
+    if (selectedRoleId && !selectedRoles.some(r => r.id === selectedRoleId)) {
+      const role = availableRoles.find(r => r.id === selectedRoleId)
+      if (role) {
+        setSelectedRoles([...selectedRoles, {
+          id: role.id,
+          name: role.name,
+          dateAdded: new Date().toLocaleDateString('id-ID', { day: '2-digit', month: '2-digit', year: 'numeric' })
+        }])
+        setSelectedRoleId("")
+        if (errors.roles) {
+          setErrors((prev) => ({ ...prev, roles: "" }))
+        }
+      }
     }
   };
 
   const handleRemoveRole = (roleId) => {
-    setRoles(roles.filter(r => r.id !== roleId));
+    setSelectedRoles(selectedRoles.filter(r => r.id !== roleId));
   };
 
   const validateForm = () => {
     const newErrors = {};
 
-    if (!formData.fullName.trim()) newErrors.fullName = "Nama depan wajib diisi";
+    if (!formData.first_name.trim()) newErrors.first_name = "Nama depan wajib diisi";
+    if (!formData.last_name.trim()) newErrors.last_name = "Nama belakang wajib diisi";
     if (!formData.username.trim()) newErrors.username = "Username wajib diisi";
     if (!formData.email.trim()) newErrors.email = "Email wajib diisi";
     else if (!/\S+@\S+\.\S+/.test(formData.email)) newErrors.email = "Email tidak valid";
     if (!formData.password) newErrors.password = "Password wajib diisi";
     else if (formData.password.length < 8) newErrors.password = "Password minimal 8 karakter";
-    if (formData.password !== formData.confirmPassword) {
-      newErrors.confirmPassword = "Password tidak cocok";
+    if (formData.password !== formData.password_confirmation) {
+      newErrors.password_confirmation = "Password tidak cocok";
     }
-    if (roles.length === 0) newErrors.roles = "Minimal satu role harus ditambahkan";
+    if (selectedRoles.length === 0) newErrors.roles = "Minimal satu role harus ditambahkan";
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -83,24 +97,34 @@ export function AddUserModal({ isOpen, onClose, onSave }) {
   const handleSubmit = (e) => {
     e.preventDefault();
     if (validateForm()) {
-      const { confirmPassword, ...userData } = formData;
-      onSave({ ...userData, roles: roles.map(r => r.name) });
+      // Prepare payload according to CreateAdminUserRequest schema
+      const payload = {
+        first_name: formData.first_name,
+        last_name: formData.last_name,
+        username: formData.username,
+        email: formData.email,
+        password: formData.password,
+        password_confirmation: formData.password_confirmation,
+        status: formData.status,
+        role_ids: selectedRoles.map(r => r.id), // Array of UUIDs
+      };
+      onSave(payload);
       handleReset();
     }
   };
 
   const handleReset = () => {
     setFormData({
-      fullName: "",
-      lastName: "",
+      first_name: "",
+      last_name: "",
       username: "",
       email: "",
-      status: "Aktif",
+      status: "active",
       password: "",
-      confirmPassword: "",
+      password_confirmation: "",
     });
-    setRoles([]);
-    setSelectedRole("");
+    setSelectedRoles([]);
+    setSelectedRoleId("");
     setErrors({});
   };
 
@@ -123,30 +147,31 @@ export function AddUserModal({ isOpen, onClose, onSave }) {
             {/* Nama Depan dan Belakang */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="fullName" className="text-sm text-gray-700">
+                <Label htmlFor="first_name" className="text-sm text-gray-700">
                   Nama Depan
                 </Label>
                 <Input
-                  id="fullName"
-                  value={formData.fullName}
-                  onChange={(e) => handleChange("fullName", e.target.value)}
+                  id="first_name"
+                  value={formData.first_name}
+                  onChange={(e) => handleChange("first_name", e.target.value)}
                   placeholder="Masukkan Nama Depan"
-                  className={`h-11 ${errors.fullName ? "border-red-500" : ""}`}
+                  className={`h-11 ${errors.first_name ? "border-red-500" : ""}`}
                 />
-                {errors.fullName && <p className="text-xs text-red-500">{errors.fullName}</p>}
+                {errors.first_name && <p className="text-xs text-red-500">{errors.first_name}</p>}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="lastName" className="text-sm text-gray-700">
+                <Label htmlFor="last_name" className="text-sm text-gray-700">
                   Nama Belakang
                 </Label>
                 <Input
-                  id="lastName"
-                  value={formData.lastName}
-                  onChange={(e) => handleChange("lastName", e.target.value)}
+                  id="last_name"
+                  value={formData.last_name}
+                  onChange={(e) => handleChange("last_name", e.target.value)}
                   placeholder="Masukkan Nama Belakang"
-                  className="h-11"
+                  className={`h-11 ${errors.last_name ? "border-red-500" : ""}`}
                 />
+                {errors.last_name && <p className="text-xs text-red-500">{errors.last_name}</p>}
               </div>
             </div>
 
@@ -200,18 +225,18 @@ export function AddUserModal({ isOpen, onClose, onSave }) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-sm text-gray-700">
+                <Label htmlFor="password_confirmation" className="text-sm text-gray-700">
                   Confirm Password
                 </Label>
                 <Input
-                  id="confirmPassword"
+                  id="password_confirmation"
                   type="password"
-                  value={formData.confirmPassword}
-                  onChange={(e) => handleChange("confirmPassword", e.target.value)}
+                  value={formData.password_confirmation}
+                  onChange={(e) => handleChange("password_confirmation", e.target.value)}
                   placeholder="Ulangi Password"
-                  className={`h-11 ${errors.confirmPassword ? "border-red-500" : ""}`}
+                  className={`h-11 ${errors.password_confirmation ? "border-red-500" : ""}`}
                 />
-                {errors.confirmPassword && <p className="text-xs text-red-500">{errors.confirmPassword}</p>}
+                {errors.password_confirmation && <p className="text-xs text-red-500">{errors.password_confirmation}</p>}
               </div>
             </div>
 
@@ -226,8 +251,8 @@ export function AddUserModal({ isOpen, onClose, onSave }) {
                 </SelectTrigger>
                 <SelectContent>
                   {STATUS_OPTIONS.map((status) => (
-                    <SelectItem key={status} value={status}>
-                      {status}
+                    <SelectItem key={status.value} value={status.value}>
+                      {status.label}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -243,16 +268,17 @@ export function AddUserModal({ isOpen, onClose, onSave }) {
               {/* Role Selection */}
               <div className="flex gap-2 mb-4">
                 <Select
-                  value={selectedRole}
-                  onValueChange={(value) => setSelectedRole(value)}
+                  value={selectedRoleId}
+                  onValueChange={(value) => setSelectedRoleId(value)}
+                  disabled={isLoadingRoles}
                 >
                   <SelectTrigger className="h-11 flex-1">
-                    <SelectValue placeholder="Pilih Role" />
+                    <SelectValue placeholder={isLoadingRoles ? "Memuat role..." : "Pilih Role"} />
                   </SelectTrigger>
                   <SelectContent>
-                    {AVAILABLE_ROLES.map((role) => (
-                      <SelectItem key={role} value={role}>
-                        {role}
+                    {availableRoles.map((role) => (
+                      <SelectItem key={role.id} value={role.id}>
+                        {role.name}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -261,6 +287,7 @@ export function AddUserModal({ isOpen, onClose, onSave }) {
                   type="button"
                   onClick={handleAddRole}
                   className="bg-blue hover:bg-blue-600"
+                  disabled={!selectedRoleId || isLoadingRoles}
                 >
                   Tambah
                 </Button>
@@ -277,14 +304,14 @@ export function AddUserModal({ isOpen, onClose, onSave }) {
                     </tr>
                   </thead>
                   <tbody>
-                    {roles.length === 0 ? (
+                    {selectedRoles.length === 0 ? (
                       <tr>
                         <td colSpan="3" className="text-center p-4 text-sm text-gray-500">
                           Belum ada role yang ditambahkan
                         </td>
                       </tr>
                     ) : (
-                      roles.map((role) => (
+                      selectedRoles.map((role) => (
                         <tr key={role.id} className="border-b last:border-b-0">
                           <td className="p-3 text-sm">{role.name}</td>
                           <td className="p-3 text-sm">{role.dateAdded}</td>

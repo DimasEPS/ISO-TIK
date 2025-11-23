@@ -10,7 +10,7 @@ export function CaseDetailModal({ isOpen, onClose, caseData, primaryAction, seco
   const fields = [
     {
       label: "No. NCR",
-      value: caseData.id,
+      value: caseData.ncrNumber || caseData.id,
       className: "font-bold text-navy",
     },
     {

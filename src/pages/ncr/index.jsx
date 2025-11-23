@@ -3,8 +3,12 @@ import { SearchIcon, Plus, Eye, FilePen, FileText, Download, Trash2, Loader2 } f
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Button } from "@/components/ui/button"
 import { usePageTemplate } from "@/hooks/usePageTemplate";
-import { useNCRDocuments } from "./hooks/useNCRData"
-import { ncrMockData } from "./data/mockData"
+import { 
+  useNCRDocuments as useNCRDocumentsQuery,
+  useCreateNCRDocument,
+  useUpdateNCRDocument,
+  useDeleteNCRDocument 
+} from "./hooks/useNCRQueries"
 import {
   NCRDetailModal,
   NCREditModal,
@@ -28,23 +32,25 @@ export default function NCR() {
     },
   });
   const [statusFilter, setStatusFilter] = useState("all")
+  const [searchQuery, setSearchQuery] = useState("")
+  const [perPage, setPerPage] = useState(10)
+  const [currentPage, setActivePage] = useState(1)
 
-  const statusFilteredData = useMemo(() => {
-    if (statusFilter === "all") return ncrMockData
-    return ncrMockData.filter((item) => item.status === statusFilter)
-  }, [statusFilter])
+  // Fetch documents from API
+  const { data: documentsData, isLoading, error } = useNCRDocumentsQuery({
+    page: currentPage,
+    per_page: perPage,
+    search: searchQuery || undefined,
+    status: statusFilter !== "all" ? statusFilter : undefined,
+  })
 
-  const {
-    searchQuery,
-    setSearchQuery,
-    perPage,
-    currentPage,
-    setActivePage,
-    pagedData,
-    totalData,
-    totalPages,
-    handlePaginateChange,
-  } = useNCRDocuments(statusFilteredData)
+  const createMutation = useCreateNCRDocument()
+  const updateMutation = useUpdateNCRDocument()
+  const deleteMutation = useDeleteNCRDocument()
+
+  const pagedData = documentsData?.data || []
+  const totalData = documentsData?.meta?.total || 0
+  const totalPages = documentsData?.meta?.last_page || 1
 
   const [selectedNCR, setSelectedNCR] = useState(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
@@ -99,7 +105,7 @@ export default function NCR() {
     setGeneratingNCRId(ncr.id)
     try {
       await downloadNCRDocumentPDF(ncr, {
-        filename: `laporan-ncr-${ncr.ncrNumber || ncr.id}.pdf`,
+        filename: `laporan-ncr-${ncr.ncr_number || ncr.id}.pdf`,
       })
     } catch (error) {
       console.error("Gagal mengunduh PDF NCR", error)
@@ -119,6 +125,45 @@ export default function NCR() {
     if (!previewNCR) return null
     return getNCRDocumentPDFPreview(previewNCR)
   }, [previewNCR])
+
+  const handleSaveAdd = async (formData) => {
+    try {
+      await createMutation.mutateAsync(formData)
+      setIsAddModalOpen(false)
+    } catch (error) {
+      console.error("Gagal menambah dokumen NCR:", error)
+    }
+  }
+
+  const handleSaveEdit = async (formData) => {
+    if (!selectedNCR?.id) return
+    try {
+      await updateMutation.mutateAsync({
+        documentId: selectedNCR.id,
+        payload: formData,
+      })
+      setIsEditModalOpen(false)
+      setSelectedNCR(null)
+    } catch (error) {
+      console.error("Gagal mengupdate dokumen NCR:", error)
+    }
+  }
+
+  const handleConfirmDelete = async (ncrData) => {
+    if (!ncrData?.id) return
+    try {
+      await deleteMutation.mutateAsync(ncrData.id)
+      setIsDeleteModalOpen(false)
+      setSelectedNCR(null)
+    } catch (error) {
+      console.error("Gagal menghapus dokumen NCR:", error)
+    }
+  }
+
+  const handlePaginateChange = useCallback((value) => {
+    setPerPage(Number(value))
+    setActivePage(1)
+  }, [])
 
   return (
     <div className="flex flex-col gap-6">
@@ -144,73 +189,90 @@ export default function NCR() {
       </div>
 
       <div className="space-y-4">
-        {pagedData.map((ncr) => (
-          <ChecklistCard
-            key={ncr.id}
-            checklist={ncr}
-            badge={ncr.id}
-            title={ncr.title}
-            description={ncr.description}
-            actions={
-              <div className="flex shrink-0 items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => handleViewDetail(ncr)}
-                  className="rounded p-2 transition-colors hover:bg-blue-50"
-                  title="Lihat Detail"
-                  aria-label="Lihat Detail NCR"
-                >
-                  <Eye className="h-5 w-5 text-[#000000]" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleEdit(ncr)}
-                  className="rounded p-2 transition-colors hover:bg-blue-50"
-                  title="Edit"
-                  aria-label="Edit NCR"
-                >
-                  <FilePen className="h-5 w-5 text-[#193cb8]" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handlePreviewPDF(ncr)}
-                  className="rounded p-2 transition-colors hover:bg-blue-50"
-                  title="Pratinjau PDF"
-                  aria-label="Pratinjau PDF NCR"
-                >
-                  <FileText className="h-5 w-5 text-[#00c950]" />
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDownloadPDF(ncr)}
-                  className="rounded p-2 transition-colors hover:bg-blue-50 disabled:opacity-60"
-                  title="Unduh PDF"
-                  aria-label="Unduh PDF NCR"
-                  disabled={generatingNCRId === ncr.id}
-                >
-                  {generatingNCRId === ncr.id ? (
-                    <Loader2 className="h-5 w-5 animate-spin text-[#2B7FFF]" />
-                  ) : (
-                    <Download className="h-5 w-5 text-[#f0b100]" />
-                  )}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => handleDelete(ncr)}
-                  className="rounded p-2 transition-colors hover:bg-red-50"
-                  title="Hapus"
-                  aria-label="Hapus NCR"
-                >
-                  <Trash2 className="h-5 w-5 text-[#FB2C36]" />
-                </button>
-              </div>
-            }
-          />
-        ))}
-        {pagedData.length === 0 && (
+        {isLoading ? (
+          <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+            <p>Memuat data NCR...</p>
+          </div>
+        ) : error ? (
+          <div className="rounded-2xl border border-dashed border-red-300 bg-red-50 p-8 text-center text-red-600">
+            <p>Gagal memuat data NCR</p>
+            <p className="text-sm mt-2">{error.message}</p>
+          </div>
+        ) : pagedData.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
             Tidak ada NCR sesuai pencarian
           </div>
+        ) : (
+          pagedData.map((ncr, index) => {
+            const listNumber =
+              ncr.ncr_number ||
+              ncr.document_number ||
+              String((currentPage - 1) * perPage + index + 1).padStart(2, "0");
+            return (
+            <ChecklistCard
+              key={ncr.id}
+              checklist={ncr}
+              badge={listNumber}
+              title={ncr.title}
+              description={ncr.description}
+              actions={
+                <div className="flex shrink-0 items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => handleViewDetail(ncr)}
+                    className="rounded p-2 transition-colors hover:bg-blue-50"
+                    title="Lihat Detail"
+                    aria-label="Lihat Detail NCR"
+                  >
+                    <Eye className="h-5 w-5 text-[#000000]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleEdit(ncr)}
+                    className="rounded p-2 transition-colors hover:bg-blue-50"
+                    title="Edit"
+                    aria-label="Edit NCR"
+                  >
+                    <FilePen className="h-5 w-5 text-[#193cb8]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handlePreviewPDF(ncr)}
+                    className="rounded p-2 transition-colors hover:bg-blue-50"
+                    title="Pratinjau PDF"
+                    aria-label="Pratinjau PDF NCR"
+                  >
+                    <FileText className="h-5 w-5 text-[#00c950]" />
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDownloadPDF(ncr)}
+                    className="rounded p-2 transition-colors hover:bg-blue-50 disabled:opacity-60"
+                    title="Unduh PDF"
+                    aria-label="Unduh PDF NCR"
+                    disabled={generatingNCRId === ncr.id}
+                  >
+                    {generatingNCRId === ncr.id ? (
+                      <Loader2 className="h-5 w-5 animate-spin text-[#2B7FFF]" />
+                    ) : (
+                      <Download className="h-5 w-5 text-[#f0b100]" />
+                    )}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => handleDelete(ncr)}
+                    className="rounded p-2 transition-colors hover:bg-red-50"
+                    title="Hapus"
+                    aria-label="Hapus NCR"
+                  >
+                    <Trash2 className="h-5 w-5 text-[#FB2C36]" />
+                  </button>
+                </div>
+              }
+            />
+            );
+          })
         )}
       </div>
 
@@ -235,7 +297,7 @@ export default function NCR() {
           isOpen={isEditModalOpen}
           onClose={handleCloseEditModal}
           ncrData={selectedNCR}
-          onSave={(data) => console.log("Saving data", data)}
+          onSave={handleSaveEdit}
         />
       )}
       {selectedNCR && (
@@ -243,25 +305,25 @@ export default function NCR() {
           isOpen={isDeleteModalOpen}
           onClose={handleCloseDeleteModal}
           ncrData={selectedNCR}
-          onConfirm={(data) => console.log("Deleting data", data)}
+          onConfirm={handleConfirmDelete}
         />
       )}
       <NCRAddModal
         isOpen={isAddModalOpen}
         onClose={() => setIsAddModalOpen(false)}
-        onSave={(data) => console.log("Adding data", data)}
+        onSave={handleSaveAdd}
       />
 
       <PDFPreviewDialog
         open={isPreviewDialogOpen}
         onOpenChange={handlePreviewDialogChange}
-        title={`Pratinjau Laporan NCR ${previewNCR?.ncrNumber || previewNCR?.id || ""}`.trim()}
+        title={`Pratinjau Laporan NCR ${previewNCR?.ncr_number || previewNCR?.id || ""}`.trim()}
         previewBuilder={previewNCR ? previewBuilder : null}
         onDownload={
           previewNCR
             ? () =>
                 downloadNCRDocumentPDF(previewNCR, {
-                  filename: `laporan-ncr-${previewNCR.ncrNumber || previewNCR.id}.pdf`,
+                  filename: `laporan-ncr-${previewNCR.ncr_number || previewNCR.id}.pdf`,
                 })
             : null
         }

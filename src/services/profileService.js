@@ -12,6 +12,7 @@ export const profileService = {
   },
 
   updateProfile: async ({ token, data, timezone } = {}) => {
+    // data is sent as JSON payload
     const response = await apiClient("/profile", {
       method: "PUT",
       token,

@@ -72,7 +72,7 @@ export function ResponseDeleteModal({
             <ConfirmationInput
               label={`Untuk menghapus ${itemType.toLowerCase()}, ketik ${itemType.toLowerCase()} berikut:`}
               placeholder={`Ketik ${itemType.toLowerCase()} di sini`}
-              expectedValue={itemData?.deskripsi || ""}
+              expectedValue={itemData?.deskripsi || itemData?.description || ""}
               onValidChange={setIsValid}
             />
           </div>

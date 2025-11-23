@@ -1,8 +1,8 @@
-import { useState } from "react";
+import { useState, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { usePageTemplate } from "@/hooks/usePageTemplate";
 import { Button } from "@/components/ui/button";
-import { SearchIcon, ChevronDown } from "lucide-react";
+import { SearchIcon, ChevronDown, Loader2 } from "lucide-react";
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group";
 import {
   DropdownMenu,
@@ -12,8 +12,14 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { CaseCard, CaseDetailModal, CaseEditModal, CaseAddModal, CaseDeleteModal } from "./components/case";
 import { PaginationControls } from "./components/common";
-import { useCaseDocuments } from "./hooks/useNCRData";
-import { casesMockData } from "./data/mockData";
+import { 
+  useNCRCases, 
+  useNCRDocument,
+  useCreateNCRCase,
+  useUpdateNCRCase,
+  useDeleteNCRCase 
+} from "./hooks/useNCRQueries";
+import { CASE_STATUS, CASE_STATUS_LABELS } from "./constants";
 
 export default function CaseListPage() {
   usePageTemplate({
@@ -33,26 +39,80 @@ export default function CaseListPage() {
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [perPage, setPerPage] = useState(10);
+  const [currentPage, setActivePage] = useState(1);
 
-  const {
-    searchQuery,
-    setSearchQuery,
-    perPage,
-    currentPage,
-    setActivePage,
-    pagedData,
-    totalData,
-    totalPages,
-    handlePaginateChange,
-  } = useCaseDocuments(casesMockData);
+  // Fetch NCR document details
+  const { data: ncrDocument } = useNCRDocument(id);
 
-  // Mock data - in real app, fetch based on id
+  // Fetch cases for this document
+  const { data: casesResponse, isLoading, error } = useNCRCases(id, {
+    page: currentPage,
+    per_page: perPage,
+    search: searchQuery || undefined,
+    status: statusFilter !== "all" ? statusFilter : undefined,
+  });
+
+  const createMutation = useCreateNCRCase();
+  const updateMutation = useUpdateNCRCase();
+  const deleteMutation = useDeleteNCRCase();
+
+  const rawCases = casesResponse?.cases?.data ?? [];
+  const paginationMeta = casesResponse?.cases?.meta ?? {};
+  const totalData = paginationMeta.total ?? 0;
+  const totalPages = paginationMeta.last_page ?? 1;
+
+  const documentData = casesResponse?.document || ncrDocument?.data;
+
+  const normalizedCases = useMemo(() => {
+    if (!rawCases.length) return [];
+    return rawCases.map((item) => {
+      const ncrNumber = item.ncr_number || item.case_number || item.id || "";
+      const location = item.location || item.department_location || item.bagianTerkait || "-";
+      const ncrDate = item.ncr_date || item.tanggal || "";
+      const referencesStandard = item.references_standard || item.standard_reference || item.standarReferensi || "";
+      const clause = item.clause || item.klasifikasi || "";
+      const auditorName = item.auditor_name || item.namaAuditor || item.auditor?.name || "";
+      const auditeeName = item.auditee_name || item.namaAuditee || item.auditee?.name || "";
+      const auditorId = item.id_auditor || item.auditor_id || item.auditor?.id || "";
+      const auditeeId = item.id_auditee || item.auditee_id || item.auditee?.id || "";
+      const targetDate = item.target_date || item.targetPerbaikan || "";
+      const completionDate = item.completion_date || item.tanggalSelesai || "";
+      const documentId = item.id_ncr_documents || item.document_id || id;
+
+      return {
+        id: item.id,
+        ncrNumber,
+        ncrDate,
+        location,
+        referencesStandard,
+        clause,
+        auditorName,
+        auditorId,
+        auditeeName,
+        auditeeId,
+        status: item.status || "",
+        targetDate,
+        completionDate,
+        findingCategory: item.finding_category || item.findingCategory || "minor",
+        documentId,
+        bagianTerkait: location,
+        tanggal: ncrDate,
+        standarReferensi: referencesStandard,
+        klasifikasi: clause,
+        namaAuditor: auditorName,
+        namaAuditee: auditeeName,
+      };
+    });
+  }, [rawCases, id]);
+
   const ncrDetail = {
     id: id,
-    title: "NCR Dokumen 1",
-    date: "27/4/2025",
-    description:
-      "To provide management direction and support for information security in accordance with business requirements and relevant laws and regulations.",
+    title: documentData?.title || "NCR Dokumen",
+    date: documentData?.created_at ? new Date(documentData.created_at).toLocaleDateString('id-ID') : "-",
+    description: documentData?.description || "",
   };
 
   const handleViewDetail = (kasus) => {
@@ -70,16 +130,29 @@ export default function CaseListPage() {
     setIsDeleteModalOpen(true);
   };
 
-  const handleSaveEdit = (updatedCase) => {
-    // TODO: Implement save logic (API call)
-    console.log("Saving case:", updatedCase);
-    // In real app, you would update the data here
+  const handleSaveEdit = async (updatedCase) => {
+    if (!selectedCase?.id) return;
+    try {
+      await updateMutation.mutateAsync({
+        caseId: selectedCase.id,
+        payload: updatedCase,
+      });
+      setIsEditModalOpen(false);
+      setSelectedCase(null);
+    } catch (error) {
+      console.error("Gagal mengupdate kasus:", error);
+    }
   };
 
-  const handleConfirmDelete = (caseData) => {
-    // TODO: Implement delete logic (API call)
-    console.log("Deleting case:", caseData);
-    // In real app, you would delete the data here
+  const handleConfirmDelete = async (caseData) => {
+    if (!caseData?.id) return;
+    try {
+      await deleteMutation.mutateAsync(caseData.id);
+      setIsDeleteModalOpen(false);
+      setSelectedCase(null);
+    } catch (error) {
+      console.error("Gagal menghapus kasus:", error);
+    }
   };
 
   const handleCloseDetailModal = () => {
@@ -101,15 +174,26 @@ export default function CaseListPage() {
     setIsAddModalOpen(true);
   };
 
-  const handleSaveAdd = (newCase) => {
-    // TODO: Implement add logic (API call)
-    console.log("Adding new case:", newCase);
-    // In real app, you would add the data here
+  const handleSaveAdd = async (newCase) => {
+    try {
+      await createMutation.mutateAsync({
+        ...newCase,
+        documentId: id,
+      });
+      setIsAddModalOpen(false);
+    } catch (error) {
+      console.error("Gagal menambah kasus:", error);
+    }
   };
 
   const handleCloseAddModal = () => {
     setIsAddModalOpen(false);
   };
+
+  const handlePaginateChange = useCallback((value) => {
+    setPerPage(Number(value));
+    setActivePage(1);
+  }, []);
 
   const handleDetailKasus = () => {
     handleCloseDetailModal();
@@ -177,16 +261,26 @@ export default function CaseListPage() {
               variant="outline"
               className="h-14 w-[204px] justify-between bg-white border-gray-300"
             >
-              Semua Status
+              {statusFilter === "all" ? "Semua Status" : CASE_STATUS_LABELS[statusFilter]}
               <ChevronDown className="h-4 w-4 opacity-50" />
             </Button>
           </DropdownMenuTrigger>
           <DropdownMenuContent align="start" className="w-[204px]">
-            <DropdownMenuItem>Semua Status</DropdownMenuItem>
-            <DropdownMenuItem>Draft</DropdownMenuItem>
-            <DropdownMenuItem>In Progress</DropdownMenuItem>
-            <DropdownMenuItem>Reviewed</DropdownMenuItem>
-            <DropdownMenuItem>Approved</DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setStatusFilter("all")}>
+              Semua Status
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setStatusFilter(CASE_STATUS.DRAFT)}>
+              {CASE_STATUS_LABELS[CASE_STATUS.DRAFT]}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setStatusFilter(CASE_STATUS.IN_PROGRESS)}>
+              {CASE_STATUS_LABELS[CASE_STATUS.IN_PROGRESS]}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setStatusFilter(CASE_STATUS.REVIEWED)}>
+              {CASE_STATUS_LABELS[CASE_STATUS.REVIEWED]}
+            </DropdownMenuItem>
+            <DropdownMenuItem onClick={() => setStatusFilter(CASE_STATUS.APPROVED)}>
+              {CASE_STATUS_LABELS[CASE_STATUS.APPROVED]}
+            </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>
 
@@ -200,15 +294,31 @@ export default function CaseListPage() {
 
       {/* Cases Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {pagedData.map((kasus, index) => (
-          <CaseCard 
-            key={`${kasus.id}-${index}`} 
-            kasus={kasus}
-            onViewDetail={handleViewDetail}
-            onEdit={handleEdit}
-            onDelete={handleDelete}
-          />
-        ))}
+        {isLoading ? (
+          <div className="col-span-full rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
+            <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2" />
+            <p>Memuat data kasus...</p>
+          </div>
+        ) : error ? (
+          <div className="col-span-full rounded-2xl border border-dashed border-red-300 bg-red-50 p-8 text-center text-red-600">
+            <p>Gagal memuat data kasus</p>
+            <p className="text-sm mt-2">{error.message}</p>
+          </div>
+        ) : normalizedCases.length === 0 ? (
+          <div className="col-span-full rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
+            Tidak ada kasus sesuai pencarian
+          </div>
+        ) : (
+          normalizedCases.map((kasus, index) => (
+            <CaseCard 
+              key={`${kasus.id}-${index}`} 
+              kasus={kasus}
+              onViewDetail={handleViewDetail}
+              onEdit={handleEdit}
+              onDelete={handleDelete}
+            />
+          ))
+        )}
       </div>
 
       {/* Pagination Controls */}

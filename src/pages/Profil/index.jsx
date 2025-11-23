@@ -4,6 +4,7 @@ import { useAuth } from "@/auth/context/AuthContext";
 import {
   ProfileCard,
   ActivityLogTable,
+  EditAccountModal,
   EditProfileModal,
   EditPasswordModal,
 } from "./components";
@@ -19,7 +20,9 @@ const mapProfileResponse = (payload) => {
     username: user.username || "",
     lastLogin: user.last_login,
     roles: payload.roles || [],
+    degreePrefix: profile.degree_prefix || "",
     nama: profile.full_name || "",
+    degreeSuffix: profile.degree_suffix || "",
     nip: profile.nip || "-",
     jabatan: profile.job_title || "-",
     departemen: profile.department || "-",
@@ -58,10 +61,10 @@ const normalizeOptionalField = (value) => {
 
 const mapProfileFieldErrors = (errors = {}) => {
   const mapped = {};
-  if (errors.first_name?.[0]) mapped.nama = errors.first_name[0];
-  if (errors.last_name?.[0]) mapped.nama = errors.last_name[0];
-  if (errors.username?.[0]) mapped.username = errors.username[0];
-  if (errors.email?.[0]) mapped.email = errors.email[0];
+  if (errors.degree_prefix?.[0]) mapped.gelarAwalan = errors.degree_prefix[0];
+  if (errors.first_name?.[0]) mapped.namaDepan = errors.first_name[0];
+  if (errors.last_name?.[0]) mapped.namaBelakang = errors.last_name[0];
+  if (errors.degree_suffix?.[0]) mapped.gelarAkhiran = errors.degree_suffix[0];
   if (errors.nip?.[0]) mapped.nip = errors.nip[0];
   if (errors.job_title?.[0]) mapped.jabatan = errors.job_title[0];
   if (errors.department?.[0]) mapped.departemen = errors.department[0];
@@ -78,14 +81,24 @@ const mapPasswordFieldErrors = (errors = {}) => {
   return mapped;
 };
 
+const mapAccountFieldErrors = (errors = {}) => {
+  const mapped = {};
+  if (errors.username?.[0]) mapped.username = errors.username[0];
+  if (errors.email?.[0]) mapped.email = errors.email[0];
+  return mapped;
+};
+
 export default function Profil() {
   const { token, updateUserInfo } = useAuth();
   const [userData, setUserData] = useState(null);
   const [profileLoading, setProfileLoading] = useState(true);
   const [profileError, setProfileError] = useState(null);
 
+  const [isEditAccountModalOpen, setIsEditAccountModalOpen] = useState(false);
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
   const [isEditPasswordModalOpen, setIsEditPasswordModalOpen] = useState(false);
+  const [accountSaving, setAccountSaving] = useState(false);
+  const [accountFieldErrors, setAccountFieldErrors] = useState({});
   const [profileSaving, setProfileSaving] = useState(false);
   const [profileFieldErrors, setProfileFieldErrors] = useState({});
   const [passwordSaving, setPasswordSaving] = useState(false);
@@ -131,6 +144,11 @@ export default function Profil() {
     fetchProfile();
   }, [fetchProfile]);
 
+  const handleEditAccount = () => {
+    setAccountFieldErrors({});
+    setIsEditAccountModalOpen(true);
+  };
+
   const handleEditProfile = () => {
     setProfileFieldErrors({});
     setIsEditProfileModalOpen(true);
@@ -141,6 +159,11 @@ export default function Profil() {
     setIsEditPasswordModalOpen(true);
   };
 
+  const closeAccountModal = useCallback(() => {
+    setIsEditAccountModalOpen(false);
+    setAccountFieldErrors({});
+  }, []);
+
   const closeProfileModal = useCallback(() => {
     setIsEditProfileModalOpen(false);
     setProfileFieldErrors({});
@@ -149,6 +172,15 @@ export default function Profil() {
   const closePasswordModal = useCallback(() => {
     setIsEditPasswordModalOpen(false);
     setPasswordFieldErrors({});
+  }, []);
+
+  const clearAccountFieldError = useCallback((field) => {
+    setAccountFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
   }, []);
 
   const clearProfileFieldError = useCallback((field) => {
@@ -174,56 +206,73 @@ export default function Profil() {
       return { success: false };
     }
 
-    const normalizedName = updatedData.nama?.trim() || "";
-    if (!normalizedName) {
+    const firstName = updatedData.firstName?.trim() || "";
+    const lastName = updatedData.lastName?.trim() || "";
+
+    if (!firstName) {
       setProfileFieldErrors((prev) => ({
         ...prev,
-        nama: "Nama lengkap wajib diisi",
+        namaDepan: "Nama depan wajib diisi",
       }));
-      return { success: false, errorMessage: "Nama lengkap wajib diisi" };
+      return { success: false, errorMessage: "Nama depan wajib diisi" };
     }
 
     setProfileSaving(true);
     setProfileFieldErrors({});
 
     try {
-      await profileService.updateAccount({
-        token,
-        data: {
-          username: updatedData.username?.trim(),
-          email: updatedData.email?.trim(),
-        },
-      });
-      updateUserInfo({
-        username: updatedData.username?.trim(),
-        email: updatedData.email?.trim(),
-      });
+      const payload = {
+        first_name: firstName,
+      };
 
-      const profileForm = new FormData();
-      const { firstName, lastName } = splitFullName(normalizedName);
-      if (!firstName) {
-        setProfileFieldErrors({ nama: "Nama lengkap wajib diisi" });
-        return { success: false, errorMessage: "Nama lengkap wajib diisi" };
+      if (lastName) {
+        payload.last_name = lastName;
       }
-      profileForm.append("first_name", firstName);
-      profileForm.append("last_name", lastName || "");
-      profileForm.append("nip", normalizeOptionalField(updatedData.nip));
-      profileForm.append("job_title", normalizeOptionalField(updatedData.jabatan));
-      profileForm.append("department", normalizeOptionalField(updatedData.departemen));
-      profileForm.append("phone", normalizeOptionalField(updatedData.telepon));
-      if (updatedData.avatar) {
-        profileForm.append("avatar", updatedData.avatar);
-      }
+
+      const degreePrefix = normalizeOptionalField(updatedData.degreePrefix);
+      if (degreePrefix) payload.degree_prefix = degreePrefix;
+
+      const degreeSuffix = normalizeOptionalField(updatedData.degreeSuffix);
+      if (degreeSuffix) payload.degree_suffix = degreeSuffix;
+
+      const nip = normalizeOptionalField(updatedData.nip);
+      if (nip) payload.nip = nip;
+
+      const jobTitle = normalizeOptionalField(updatedData.jabatan);
+      if (jobTitle) payload.job_title = jobTitle;
+
+      const department = normalizeOptionalField(updatedData.departemen);
+      if (department) payload.department = department;
+
+      const phone = normalizeOptionalField(updatedData.telepon);
+      if (phone) payload.phone = phone;
 
       const profileResponse = await profileService.updateProfile({
         token,
-        data: profileForm,
+        data: payload,
       });
+      
+      // Update local user data
       setUserData(mapProfileResponse(profileResponse));
+      
+      // Update auth context if username/email changed (from response)
+      if (profileResponse?.user) {
+        updateUserInfo({
+          username: profileResponse.user.username,
+          email: profileResponse.user.email,
+        });
+      }
+      
       closeProfileModal();
       alert("Profil berhasil diperbarui!");
       return { success: true };
     } catch (error) {
+      console.error("=== Profile Update Error ===");
+      console.error("Full error:", error);
+      console.error("Error data:", error?.data);
+      console.error("Backend errors:", error?.data?.errors);
+      console.error("Error message:", error?.data?.message);
+      
       const backendErrors = error?.data?.errors || {};
       const mappedErrors = mapProfileFieldErrors(backendErrors);
       const fallbackMessage =
@@ -238,6 +287,57 @@ export default function Profil() {
       };
     } finally {
       setProfileSaving(false);
+    }
+  };
+
+  const handleSaveAccount = async (accountData) => {
+    if (!token || !accountData) {
+      return { success: false };
+    }
+
+    setAccountSaving(true);
+    setAccountFieldErrors({});
+
+    try {
+      const response = await profileService.updateAccount({
+        token,
+        data: {
+          username: accountData.username,
+          email: accountData.email,
+        },
+      });
+      
+      // Update local user data
+      setUserData((prev) => ({
+        ...prev,
+        username: accountData.username,
+        email: accountData.email,
+      }));
+      
+      // Update auth context
+      updateUserInfo({
+        username: accountData.username,
+        email: accountData.email,
+      });
+      
+      closeAccountModal();
+      alert("Akun berhasil diperbarui!");
+      return { success: true };
+    } catch (error) {
+      const backendErrors = error?.data?.errors || {};
+      const mappedErrors = mapAccountFieldErrors(backendErrors);
+      const fallbackMessage =
+        error?.data?.message || error?.message || "Gagal memperbarui akun";
+      if (!Object.keys(mappedErrors).length && fallbackMessage) {
+        mappedErrors.submit = fallbackMessage;
+      }
+      setAccountFieldErrors(mappedErrors);
+      return {
+        success: false,
+        errorMessage: fallbackMessage,
+      };
+    } finally {
+      setAccountSaving(false);
     }
   };
 
@@ -301,6 +401,7 @@ export default function Profil() {
       ) : userData ? (
         <ProfileCard
           user={userData}
+          onEditAccount={handleEditAccount}
           onEditProfile={handleEditProfile}
           onEditPassword={handleEditPassword}
         />
@@ -321,6 +422,17 @@ export default function Profil() {
         onPaginateChange={handlePaginateChange}
         loading={activityLoading}
         error={activityError}
+      />
+
+      {/* Edit Account Modal */}
+      <EditAccountModal
+        isOpen={isEditAccountModalOpen}
+        onClose={closeAccountModal}
+        user={userData || {}}
+        onSave={handleSaveAccount}
+        errors={accountFieldErrors}
+        isSaving={accountSaving}
+        onFieldChange={clearAccountFieldError}
       />
 
       {/* Edit Profile Modal */}

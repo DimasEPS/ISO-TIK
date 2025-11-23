@@ -35,7 +35,8 @@ export function ListCard({
               <Button
                 key={index}
                 onClick={action.onClick}
-                className={`h-9 px-3 ${action.className || 'bg-blue-600 text-white hover:bg-blue-700'} gap-1.5 text-sm`}
+                disabled={action.disabled}
+                className={`h-9 px-3 ${action.className || 'bg-blue-600 text-white hover:bg-blue-700'} gap-1.5 text-sm ${action.disabled ? 'opacity-60 cursor-not-allowed' : ''}`}
               >
                 {action.icon && <action.icon className="h-3.5 w-3.5" />}
                 {action.label}
@@ -62,7 +63,9 @@ export function ListCard({
             >
               <span className="text-gray-900 font-medium text-sm">{index + 1}.</span>
               <p className="flex-1 text-gray-900 text-sm">
-                {typeof item === 'string' ? item : item.deskripsi || item.text}
+                {typeof item === 'string'
+                  ? item
+                  : item.deskripsi || item.description || item.text || "-"}
               </p>
               {showDelete && onDelete && (
                 <button

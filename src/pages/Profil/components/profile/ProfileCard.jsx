@@ -1,14 +1,15 @@
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { Button } from "@/components/ui/button";
-import { Edit, Key } from "lucide-react";
+import { Edit, Key, UserCog } from "lucide-react";
 
 /**
  * Reusable Profile Card Component
  * @param {Object} user - User profile data
+ * @param {Function} onEditAccount - Callback for edit account button
  * @param {Function} onEditProfile - Callback for edit profile button
  * @param {Function} onEditPassword - Callback for edit password button
  */
-export function ProfileCard({ user, onEditProfile, onEditPassword }) {
+export function ProfileCard({ user, onEditAccount, onEditProfile, onEditPassword }) {
   const getInitials = (name) => {
     if (!name) return "??";
     const parts = name.split(" ");
@@ -63,11 +64,12 @@ export function ProfileCard({ user, onEditProfile, onEditPassword }) {
           {/* Action Buttons */}
           <div className="space-y-2 pt-2">
             <Button
-              onClick={onEditProfile}
-              className="w-full bg-blue-600 hover:bg-blue-700 text-white gap-2"
+              onClick={onEditAccount}
+              variant="outline"
+              className="w-full border-gray-300 gap-2"
             >
-              <Edit className="h-4 w-4" />
-              Edit Profile
+              <UserCog className="h-4 w-4" />
+              Edit Akun
             </Button>
             <Button
               onClick={onEditPassword}
@@ -75,7 +77,14 @@ export function ProfileCard({ user, onEditProfile, onEditPassword }) {
               className="w-full border-gray-300 gap-2"
             >
               <Key className="h-4 w-4" />
-              Edit Kata Sandi
+              Ubah Password
+            </Button>
+            <Button
+              onClick={onEditProfile}
+              className="w-full bg-blue-600 hover:bg-blue-700 text-white gap-2"
+            >
+              <Edit className="h-4 w-4" />
+              Edit Data Diri
             </Button>
           </div>
         </div>
@@ -93,7 +102,11 @@ export function ProfileCard({ user, onEditProfile, onEditPassword }) {
           </div>
           <div className="mt-4 space-y-2 text-center">
             <div className="text-sm text-gray-600">Nama Lengkap</div>
-            <div className="text-lg text-navy font-semibold">{user.nama || "-"}</div>
+            <div className="text-lg text-navy font-semibold">
+              {user.degreePrefix && `${user.degreePrefix} `}
+              {user.nama || "-"}
+              {user.degreeSuffix && `, ${user.degreeSuffix}`}
+            </div>
           </div>
           <div className="mt-4 space-y-2 text-center">
             <div className="text-sm text-gray-600">Nomor Induk Pegawai</div>

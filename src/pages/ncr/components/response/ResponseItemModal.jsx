@@ -34,13 +34,13 @@ export function ResponseItemModal({
   placeholder,
   buttonText = "Simpan",
 }) {
-  const [value, setValue] = useState(itemData?.deskripsi || "");
+  const [value, setValue] = useState(itemData?.deskripsi || itemData?.description || "");
   const [hasInteracted, setHasInteracted] = useState(false);
 
   const handleSubmit = (e) => {
     e.preventDefault();
     if (onSave) {
-      onSave({ ...itemData, deskripsi: value });
+      onSave({ ...itemData, deskripsi: value, description: value });
     }
     // Reset form
     setValue("");
@@ -49,7 +49,7 @@ export function ResponseItemModal({
   };
 
   const handleCancel = () => {
-    setValue(itemData?.deskripsi || "");
+    setValue(itemData?.deskripsi || itemData?.description || "");
     setHasInteracted(false);
     onClose();
   };
@@ -64,7 +64,7 @@ export function ResponseItemModal({
   // Update value when itemData changes (for edit mode)
   useEffect(() => {
     if (itemData) {
-      setValue(itemData.deskripsi || "");
+      setValue(itemData.deskripsi || itemData.description || "");
     }
   }, [itemData]);
 

@@ -6,7 +6,7 @@ export function CaseCard({ kasus, onViewDetail, onEdit, onDelete }) {
     <div className="bg-white rounded-lg border border-gray-300 p-4 hover:shadow-md transition-shadow">
       <div className="mb-3">
         <p className="text-xs text-gray-dark mb-1">Nomor NCR</p>
-        <h3 className="text-lg font-bold text-navy">{kasus.id}</h3>
+        <h3 className="text-lg font-bold text-navy">{kasus.ncrNumber || kasus.id}</h3>
       </div>
 
       <div className="space-y-2 text-sm">

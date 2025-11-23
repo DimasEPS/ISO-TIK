@@ -27,6 +27,7 @@ export function FindingEditModal({ isOpen, onClose, findingData, onSave }) {
   const [formData, setFormData] = useState({
     kategori: "",
   });
+  const descriptionText = findingData?.deskripsi || findingData?.description || "";
 
   useEffect(() => {
     if (findingData) {
@@ -62,6 +63,16 @@ export function FindingEditModal({ isOpen, onClose, findingData, onSave }) {
 
         <form onSubmit={handleSubmit}>
           <div className="space-y-4 py-4">
+            {descriptionText && (
+              <div className="space-y-2">
+                <Label className="text-sm font-medium text-gray-dark">
+                  Temuan Ketidaksesuaian
+                </Label>
+                <p className="text-sm text-gray-700 bg-gray-50 border border-gray-200 rounded-lg p-3 whitespace-pre-wrap">
+                  {descriptionText}
+                </p>
+              </div>
+            )}
             {/* Kategori Temuan */}
             <div className="space-y-2">
               <Label htmlFor="kategori" className="text-sm font-medium text-gray-dark">

@@ -13,6 +13,14 @@ import { useState } from "react";
 
 export function FindingDeleteModal({ isOpen, onClose, findingData, onConfirm }) {
   const [isValid, setIsValid] = useState(false);
+  const descriptionText = findingData?.deskripsi || findingData?.description || "";
+  const confirmationValue = descriptionText || findingData?.kategori || "";
+  const confirmationLabel = descriptionText
+    ? "Untuk menghapus temuan, ketik uraian ketidaksesuaian berikut:"
+    : "Untuk menghapus temuan, ketik kategori temuan berikut:";
+  const confirmationPlaceholder = descriptionText
+    ? "Ketik uraian ketidaksesuaian di sini"
+    : "Ketik kategori temuan di sini";
 
   const handleDelete = () => {
     if (onConfirm && isValid) {
@@ -48,13 +56,18 @@ export function FindingDeleteModal({ isOpen, onClose, findingData, onConfirm }) 
             <p className="text-sm text-red-700">
               Tindakan ini tidak dapat dibatalkan. Temuan ketidaksesuaian akan dihapus secara permanen.
             </p>
+            {descriptionText && (
+              <p className="mt-3 text-sm text-red-900 bg-white/60 border border-red-200 rounded-md p-3 whitespace-pre-wrap">
+                {descriptionText}
+              </p>
+            )}
           </div>
 
           <div className="mt-4">
             <ConfirmationInput
-              label="Untuk menghapus temuan, ketik kategori temuan berikut:"
-              placeholder="Ketik kategori temuan di sini"
-              expectedValue={findingData?.kategori || ""}
+              label={confirmationLabel}
+              placeholder={confirmationPlaceholder}
+              expectedValue={confirmationValue}
               onValidChange={setIsValid}
             />
           </div>

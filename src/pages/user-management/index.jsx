@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react"
+import { useMemo, useState, useEffect } from "react"
 import { useNavigate } from "react-router-dom"
 import { usePageTemplate } from "@/hooks/usePageTemplate";
 import { Button } from "@/components/ui/button"
@@ -19,23 +19,45 @@ import {
   DeleteUserModal,
 } from "./components"
 import { FILTER_OPTIONS, PAGINATE_OPTIONS, STATUS_STYLES } from "./constants"
-import { USERS, USER_COLUMNS as BASE_USER_COLUMNS } from "./data/index.jsx"
+import { USER_COLUMNS as BASE_USER_COLUMNS } from "./data/index.jsx"
+import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from "@/hooks/useUserManagement"
+
+// Status mapping: backend (active/inactive) → frontend display (Aktif/Nonaktif)
+const STATUS_DISPLAY_MAP = {
+  active: "Aktif",
+  inactive: "Nonaktif",
+}
 
 // Enhance USER_COLUMNS with Status render function
 const USER_COLUMNS = BASE_USER_COLUMNS.map(col => {
   if (col.key === "status") {
     return {
       ...col,
-      render: (row) => (
-        <span
-          className={`inline-flex items-center justify-center rounded-lg px-3 py-1 text-xs font-medium ${
-            STATUS_STYLES[row.status] ??
-            "bg-gray-100 text-gray-600 border border-gray-200"
-          }`}
-        >
-          {row.status}
-        </span>
-      ),
+      render: (row) => {
+        const displayStatus = STATUS_DISPLAY_MAP[row.status] ?? row.status
+        return (
+          <span
+            className={`inline-flex items-center justify-center rounded-lg px-3 py-1 text-xs font-medium ${
+              STATUS_STYLES[displayStatus] ??
+              "bg-gray-100 text-gray-600 border border-gray-200"
+            }`}
+          >
+            {displayStatus}
+          </span>
+        )
+      },
+    };
+  }
+  if (col.key === "role") {
+    return {
+      ...col,
+      render: (row) => {
+        // Display first role if multiple roles exist
+        const roleDisplay = Array.isArray(row.roles) && row.roles.length > 0
+          ? row.roles[0]
+          : "-"
+        return <span>{roleDisplay}</span>
+      },
     };
   }
   return col;
@@ -53,6 +75,7 @@ export default function ManajemenPengguna() {
   });
   const navigate = useNavigate()
   const [search, setSearch] = useState("")
+  const [debouncedSearch, setDebouncedSearch] = useState("")
   const [statusFilter, setStatusFilter] = useState(FILTER_OPTIONS[0].value)
   const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false)
   const [perPage, setPerPage] = useState(10)
@@ -66,25 +89,45 @@ export default function ManajemenPengguna() {
   const [isResetPasswordModalOpen, setIsResetPasswordModalOpen] = useState(false)
   const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false)
 
-  const filteredUsers = useMemo(() => {
-    const searchValue = search.toLowerCase()
-    return USERS.filter((user) => {
-      const matchesStatus =
-        statusFilter === "Semua Status" || user.status === statusFilter
-      const fullName = user.lastName ? `${user.fullName} ${user.lastName}` : user.fullName;
-      const matchesSearch =
-        fullName.toLowerCase().includes(searchValue) ||
-        user.username.toLowerCase().includes(searchValue) ||
-        user.email.toLowerCase().includes(searchValue)
-      return matchesStatus && matchesSearch
-    })
-  }, [search, statusFilter])
+  // Debounce search input
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setDebouncedSearch(search)
+      setActivePage(1) // Reset to first page on search
+    }, 300)
+    return () => clearTimeout(timer)
+  }, [search])
 
-  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / perPage))
-  const pagedUsers = useMemo(() => {
-    const startIndex = (activePage - 1) * perPage
-    return filteredUsers.slice(startIndex, startIndex + perPage)
-  }, [filteredUsers, activePage, perPage])
+  // Map filter value to API status (Semua Status/Aktif/Nonaktif → all/active/inactive)
+  const apiStatusFilter = useMemo(() => {
+    if (statusFilter === "Semua Status") return "all"
+    if (statusFilter === "Aktif") return "active"
+    if (statusFilter === "Nonaktif") return "inactive"
+    return "all"
+  }, [statusFilter])
+
+  // Fetch users from API with pagination and filters
+  const {
+    data: usersResponse,
+    isLoading,
+    error,
+    refetch: refetchUsers,
+  } = useUsers({
+    per_page: perPage,
+    page: activePage,
+    status: apiStatusFilter === "all" ? undefined : apiStatusFilter,
+    search: debouncedSearch || undefined,
+  })
+
+  const users = usersResponse?.data ?? []
+  const meta = usersResponse?.meta ?? {}
+  const totalPages = meta.last_page ?? 1
+  const totalData = meta.total ?? 0
+
+  // Mutations
+  const createUserMutation = useCreateUser()
+  const updateUserMutation = useUpdateUser()
+  const deleteUserMutation = useDeleteUser()
 
   // Action handlers
   const handleView = (user) => {
@@ -117,42 +160,80 @@ export default function ManajemenPengguna() {
   }
 
   const handleExportAllUsers = async () => {
-    // Generate PDF untuk semua users (filtered)
-    await generateUsersListPDF(filteredUsers, {
+    // Generate PDF untuk semua users (current page data)
+    await generateUsersListPDF(users, {
       filename: 'daftar-pengguna.pdf',
       filters: {
-        status: statusFilter !== 'all' ? statusFilter : 'Semua',
+        status: statusFilter !== 'Semua Status' ? statusFilter : 'Semua',
         search: search || undefined,
       },
     })
   }
 
   const handleAddUser = (userData) => {
-    // TODO: Implement API call to add user
-    console.log("Add user:", userData)
-    setIsAddModalOpen(false)
-    alert("Pengguna berhasil ditambahkan!")
+    console.log("Creating user with payload:", userData)
+    createUserMutation.mutate(userData, {
+      onSuccess: () => {
+        setIsAddModalOpen(false)
+        alert("Pengguna berhasil ditambahkan!")
+        refetchUsers()
+      },
+      onError: (error) => {
+        console.error("Failed to create user:", error)
+        console.error("Error data:", error.data)
+        
+        // Show validation errors if available
+        let errorMessage = error.message || "Unknown error"
+        if (error.data?.errors) {
+          const validationErrors = Object.entries(error.data.errors)
+            .map(([field, messages]) => `${field}: ${messages.join(", ")}`)
+            .join("\n")
+          errorMessage = `Validation errors:\n${validationErrors}`
+        }
+        
+        alert(`Gagal menambahkan pengguna:\n${errorMessage}`)
+      },
+    })
   }
 
   const handleSaveEdit = (userData) => {
-    // TODO: Implement API call to update user
-    console.log("Update user:", userData)
-    setIsEditModalOpen(false)
-    alert("Pengguna berhasil diperbarui!")
+    if (!selectedUser?.id) return
+    
+    updateUserMutation.mutate(
+      { userId: selectedUser.id, userData },
+      {
+        onSuccess: () => {
+          setIsEditModalOpen(false)
+          alert("Pengguna berhasil diperbarui!")
+          refetchUsers()
+        },
+        onError: (error) => {
+          console.error("Failed to update user:", error)
+          alert(`Gagal memperbarui pengguna: ${error.message || "Unknown error"}`)
+        },
+      }
+    )
   }
 
   const handleSaveResetPassword = (data) => {
-    // TODO: Implement API call to reset password
+    // TODO: Implement API call to reset password when endpoint is available
     console.log("Reset password:", data)
     setIsResetPasswordModalOpen(false)
     alert("Password berhasil direset!")
   }
 
   const handleConfirmDelete = (userId) => {
-    // TODO: Implement API call to delete user
-    console.log("Delete user:", userId)
-    setIsDeleteModalOpen(false)
-    alert("Pengguna berhasil dihapus!")
+    deleteUserMutation.mutate(userId, {
+      onSuccess: () => {
+        setIsDeleteModalOpen(false)
+        alert("Pengguna berhasil dihapus!")
+        refetchUsers()
+      },
+      onError: (error) => {
+        console.error("Failed to delete user:", error)
+        alert(`Gagal menghapus pengguna: ${error.message || "Unknown error"}`)
+      },
+    })
   }
 
   // Update columns with action handlers
@@ -219,26 +300,38 @@ export default function ManajemenPengguna() {
         </Button>
       </div>
 
-      <AdminTable
-        className="bg-white"
-        tableClassName="min-w-[960px]"
-        columns={columnsWithActions}
-        data={pagedUsers}
-        getRowKey={(row) => row.id}
-      />
+      {isLoading ? (
+        <div className="flex items-center justify-center h-64 bg-white">
+          <p className="text-gray-500">Memuat data pengguna...</p>
+        </div>
+      ) : error ? (
+        <div className="flex items-center justify-center h-64 bg-white">
+          <p className="text-red-500">Error: {error.message}</p>
+        </div>
+      ) : (
+        <>
+          <AdminTable
+            className="bg-white"
+            tableClassName="min-w-[960px]"
+            columns={columnsWithActions}
+            data={users}
+            getRowKey={(row) => row.id || row.username}
+          />
 
-      <PaginateControls
-        perPage={perPage}
-        onPaginateChange={(value) => {
-          setPerPage(Number(value))
-          setActivePage(1)
-        }}
-        paginateValue={PAGINATE_OPTIONS}
-        activePage={activePage}
-        onPageChange={setActivePage}
-        totalPages={totalPages}
-        totalData={filteredUsers.length}
-      />
+          <PaginateControls
+            perPage={perPage}
+            onPaginateChange={(value) => {
+              setPerPage(Number(value))
+              setActivePage(1)
+            }}
+            paginateValue={PAGINATE_OPTIONS}
+            activePage={activePage}
+            onPageChange={setActivePage}
+            totalPages={totalPages}
+            totalData={totalData}
+          />
+        </>
+      )}
 
       {/* Modals */}
       <ViewUserModal

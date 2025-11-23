@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -11,14 +11,23 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { Camera, X } from "lucide-react";
+import { Upload } from "lucide-react";
+
+// Split full name into first and last name
+const splitFullName = (fullName) => {
+  if (!fullName) return { namaDepan: "", namaBelakang: "" };
+  const normalized = fullName.trim().replace(/\s+/g, " ");
+  if (!normalized) return { namaDepan: "", namaBelakang: "" };
+  const parts = normalized.split(" ");
+  return {
+    namaDepan: parts[0],
+    namaBelakang: parts.slice(1).join(" "),
+  };
+};
 
 /**
- * Reusable Edit Profile Modal Component
- * @param {boolean} isOpen - Whether modal is open
- * @param {Function} onClose - Close modal callback
- * @param {Object} user - User data to edit
- * @param {Function} onSave - Save changes callback
+ * Modal Edit Data Diri (Profile Data Only - No Account Info)
+ * Endpoint: PUT /profile
  */
 export function EditProfileModal({
   isOpen,
@@ -29,30 +38,30 @@ export function EditProfileModal({
   isSaving = false,
   onFieldChange,
 }) {
+  const { namaDepan, namaBelakang } = splitFullName(user?.nama);
+  
   const [formData, setFormData] = useState({
-    nama: user?.nama || "",
+    namaDepan: namaDepan || "",
+    namaBelakang: namaBelakang || "",
+    gelarAwalan: user?.degreePrefix || "",
+    gelarAkhiran: user?.degreeSuffix || "",
     nip: user?.nip || "",
+    telepon: user?.telepon || "",
     jabatan: user?.jabatan || "",
     departemen: user?.departemen || "",
-    telepon: user?.telepon || "",
-    email: user?.email || "",
-    username: user?.username || "",
   });
   const [clientErrors, setClientErrors] = useState({});
 
   const [avatarPreview, setAvatarPreview] = useState(user?.avatar || null);
-  const [avatarFile, setAvatarFile] = useState(null);
-  const fileInputRef = useRef(null);
 
   const combinedErrors = { ...clientErrors, ...errors };
 
-  const getInitials = (name) => {
-    if (!name) return "??";
-    const parts = name.split(" ");
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[1][0]).toUpperCase();
+  const getInitials = (namaDepan, namaBelakang) => {
+    if (!namaDepan) return "??";
+    if (namaDepan && namaBelakang) {
+      return (namaDepan[0] + namaBelakang[0]).toUpperCase();
     }
-    return name.substring(0, 2).toUpperCase();
+    return namaDepan.substring(0, 2).toUpperCase();
   };
 
   const handleChange = (field, value) => {
@@ -68,59 +77,11 @@ export function EditProfileModal({
     }
   };
 
-  const handleAvatarClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleAvatarChange = (e) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      // Validate file type
-      if (!file.type.startsWith("image/")) {
-        alert("File harus berupa gambar");
-        return;
-      }
-      
-      // Validate file size (max 5MB)
-      if (file.size > 5 * 1024 * 1024) {
-        alert("Ukuran file maksimal 5MB");
-        return;
-      }
-
-      setAvatarFile(file);
-      if (errors.avatar && onFieldChange) {
-        onFieldChange("avatar");
-      }
-      const reader = new FileReader();
-      reader.onloadend = () => {
-        setAvatarPreview(reader.result);
-      };
-      reader.readAsDataURL(file);
-    }
-  };
-
-  const handleRemoveAvatar = () => {
-    setAvatarPreview(null);
-    setAvatarFile(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = "";
-    }
-    if (errors.avatar && onFieldChange) {
-      onFieldChange("avatar");
-    }
-  };
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     const validationErrors = {};
-    if (!formData.nama.trim()) {
-      validationErrors.nama = "Nama lengkap wajib diisi";
-    }
-    if (!formData.email.trim()) {
-      validationErrors.email = "Email wajib diisi";
-    }
-    if (!formData.username.trim()) {
-      validationErrors.username = "Username wajib diisi";
+    if (!formData.namaDepan.trim()) {
+      validationErrors.namaDepan = "Nama depan wajib diisi";
     }
 
     if (Object.keys(validationErrors).length > 0) {
@@ -133,10 +94,15 @@ export function EditProfileModal({
       return {};
     });
 
-    const result = await onSave({
-      ...formData,
-      avatar: avatarFile,
-      avatarPreview,
+      const result = await onSave({
+      firstName: formData.namaDepan.trim(),
+      lastName: formData.namaBelakang.trim(),
+      degreePrefix: formData.gelarAwalan,
+      degreeSuffix: formData.gelarAkhiran,
+      nip: formData.nip,
+      jabatan: formData.jabatan,
+      departemen: formData.departemen,
+      telepon: formData.telepon,
     });
 
     if (result?.success) {
@@ -149,17 +115,18 @@ export function EditProfileModal({
   // Reset form when modal opens with new user data
   useEffect(() => {
     if (isOpen && user) {
+      const { namaDepan, namaBelakang } = splitFullName(user.nama);
       setFormData({
-        nama: user.nama || "",
+        namaDepan: namaDepan || "",
+        namaBelakang: namaBelakang || "",
+        gelarAwalan: user.degreePrefix || "",
+        gelarAkhiran: user.degreeSuffix || "",
         nip: user.nip || "",
+        telepon: user.telepon || "",
         jabatan: user.jabatan || "",
         departemen: user.departemen || "",
-        telepon: user.telepon || "",
-        email: user.email || "",
-        username: user.username || "",
       });
       setAvatarPreview(user.avatar || null);
-      setAvatarFile(null);
       setClientErrors({});
     }
   }, [isOpen, user]);
@@ -184,106 +151,157 @@ export function EditProfileModal({
             Edit Data Diri
           </DialogTitle>
           <DialogDescription className="text-gray-600">
-            Perbarui informasi akun dan profil Anda. Nama, email, dan username wajib diisi.
+            Lengkapi form di bawah ini untuk mengedit Data Diri Anda sesuai kebutuhan.
           </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
           <div className="space-y-4 py-4">
             {/* Avatar Upload Section */}
-            <div className="flex flex-col items-center gap-3 pb-4 border-b border-gray-200">
-              <div className="relative">
-                <Avatar className="h-24 w-24 bg-navy text-white">
-                  <AvatarImage src={avatarPreview} alt={formData.nama} />
-                  <AvatarFallback className="text-2xl bg-navy text-white">
-                    {getInitials(formData.nama)}
-                  </AvatarFallback>
-                </Avatar>
-                <button
-                  type="button"
-                  onClick={handleAvatarClick}
-                  className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-2 shadow-lg transition-colors"
+            <div className="flex flex-col items-center gap-3 pb-4">
+              <Avatar className="h-24 w-24 bg-navy text-white">
+                <AvatarImage src={avatarPreview} alt={`${formData.namaDepan} ${formData.namaBelakang}`} />
+                <AvatarFallback className="text-2xl bg-navy text-white">
+                  {getInitials(formData.namaDepan, formData.namaBelakang)}
+                </AvatarFallback>
+              </Avatar>
+              <Button
+                type="button"
+                className="bg-gray-300 text-gray-600 gap-2 cursor-not-allowed"
+                disabled
+              >
+                <Upload className="h-4 w-4" />
+                Unggah Foto Profil (Segera)
+              </Button>
+              <p className="text-xs text-gray-500 text-center">
+                Pengunggahan foto sementara dinonaktifkan sampai API mendukung JSON upload.
+              </p>
+            </div>
+
+            {/* Nama Depan & Nama Belakang */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="namaDepan" className="text-sm text-gray-500">
+                  Nama Depan
+                </Label>
+                <Input
+                  id="namaDepan"
+                  value={formData.namaDepan}
+                  onChange={(e) => handleChange("namaDepan", e.target.value)}
+                  placeholder="Nama Depan"
+                  className="h-11 bg-gray-50"
                   disabled={isSaving}
-                >
-                  <Camera className="h-4 w-4" />
-                </button>
-                {avatarPreview && (
-                  <button
-                    type="button"
-                    onClick={handleRemoveAvatar}
-                    className="absolute top-0 right-0 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow-lg transition-colors"
-                    disabled={isSaving}
-                  >
-                    <X className="h-3 w-3" />
-                  </button>
+                />
+                {combinedErrors.namaDepan && (
+                  <p className="text-xs text-red-500">{combinedErrors.namaDepan}</p>
                 )}
               </div>
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/*"
-                onChange={handleAvatarChange}
-                className="hidden"
-                disabled={isSaving}
-              />
-              <div className="text-center">
-                <p className="text-sm text-gray-700 font-medium">Foto Profil</p>
-                <p className="text-xs text-gray-500 mt-1">
-                  Klik ikon kamera untuk mengubah foto. Max 5MB
-                </p>
-                {combinedErrors.avatar && (
-                  <p className="text-xs text-red-500 mt-1">{combinedErrors.avatar}</p>
+
+              <div className="space-y-2">
+                <Label htmlFor="namaBelakang" className="text-sm text-gray-500">
+                  Nama Belakang
+                </Label>
+                <Input
+                  id="namaBelakang"
+                  value={formData.namaBelakang}
+                  onChange={(e) => handleChange("namaBelakang", e.target.value)}
+                  placeholder="Nama Belakang"
+                  className="h-11 bg-gray-50"
+                  disabled={isSaving}
+                />
+                {combinedErrors.namaBelakang && (
+                  <p className="text-xs text-red-500">{combinedErrors.namaBelakang}</p>
                 )}
               </div>
             </div>
 
+            {/* Gelar Awalan & Gelar Akhiran */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="nama" className="text-sm text-gray-700">
-                  Nama Lengkap <span className="text-red-500">*</span>
+                <Label htmlFor="gelarAwalan" className="text-sm text-gray-500">
+                  Gelar Awalan
                 </Label>
                 <Input
-                  id="nama"
-                  value={formData.nama}
-                  onChange={(e) => handleChange("nama", e.target.value)}
-                  placeholder="Masukkan nama lengkap"
-                  className="h-11"
+                  id="gelarAwalan"
+                  value={formData.gelarAwalan}
+                  onChange={(e) => handleChange("gelarAwalan", e.target.value)}
+                  placeholder="Gelar Awalan"
+                  className="h-11 bg-gray-50"
                   disabled={isSaving}
                 />
-                {combinedErrors.nama && (
-                  <p className="text-xs text-red-500">{combinedErrors.nama}</p>
+                {combinedErrors.gelarAwalan && (
+                  <p className="text-xs text-red-500">{combinedErrors.gelarAwalan}</p>
                 )}
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="nip" className="text-sm text-gray-700">
+                <Label htmlFor="gelarAkhiran" className="text-sm text-gray-500">
+                  Gelar Akhiran
+                </Label>
+                <Input
+                  id="gelarAkhiran"
+                  value={formData.gelarAkhiran}
+                  onChange={(e) => handleChange("gelarAkhiran", e.target.value)}
+                  placeholder="Gelar Akhiran"
+                  className="h-11 bg-gray-50"
+                  disabled={isSaving}
+                />
+                {combinedErrors.gelarAkhiran && (
+                  <p className="text-xs text-red-500">{combinedErrors.gelarAkhiran}</p>
+                )}
+              </div>
+            </div>
+
+            {/* Nomor Induk Pegawai & Nomor Telepon */}
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="nip" className="text-sm text-gray-500">
                   Nomor Induk Pegawai
                 </Label>
                 <Input
                   id="nip"
                   value={formData.nip}
                   onChange={(e) => handleChange("nip", e.target.value)}
-                  placeholder="Masukkan NIP"
-                  className="h-11"
+                  placeholder="Nomor Induk Pegawai"
+                  className="h-11 bg-gray-50"
                   disabled={isSaving}
                 />
                 {combinedErrors.nip && (
                   <p className="text-xs text-red-500">{combinedErrors.nip}</p>
                 )}
               </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="telepon" className="text-sm text-gray-500">
+                  Nomor Telepon
+                </Label>
+                <Input
+                  id="telepon"
+                  type="tel"
+                  value={formData.telepon}
+                  onChange={(e) => handleChange("telepon", e.target.value)}
+                  placeholder="Nomor Telepon"
+                  className="h-11 bg-gray-50"
+                  disabled={isSaving}
+                />
+                {combinedErrors.telepon && (
+                  <p className="text-xs text-red-500">{combinedErrors.telepon}</p>
+                )}
+              </div>
             </div>
 
+            {/* Jabatan & Departemen */}
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="jabatan" className="text-sm text-gray-700">
+                <Label htmlFor="jabatan" className="text-sm text-gray-500">
                   Jabatan
                 </Label>
                 <Input
                   id="jabatan"
                   value={formData.jabatan}
                   onChange={(e) => handleChange("jabatan", e.target.value)}
-                  placeholder="Masukkan jabatan"
-                  className="h-11"
+                  placeholder="Jabatan"
+                  className="h-11 bg-gray-50"
                   disabled={isSaving}
                 />
                 {combinedErrors.jabatan && (
@@ -292,74 +310,21 @@ export function EditProfileModal({
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="departemen" className="text-sm text-gray-700">
+                <Label htmlFor="departemen" className="text-sm text-gray-500">
                   Departemen
                 </Label>
                 <Input
                   id="departemen"
                   value={formData.departemen}
                   onChange={(e) => handleChange("departemen", e.target.value)}
-                  placeholder="Masukkan departemen"
-                  className="h-11"
+                  placeholder="Departemen"
+                  className="h-11 bg-gray-50"
                   disabled={isSaving}
                 />
                 {combinedErrors.departemen && (
                   <p className="text-xs text-red-500">{combinedErrors.departemen}</p>
                 )}
               </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="telepon" className="text-sm text-gray-700">
-                Nomor Telepon
-              </Label>
-              <Input
-                id="telepon"
-                type="tel"
-                value={formData.telepon}
-                onChange={(e) => handleChange("telepon", e.target.value)}
-                placeholder="Masukkan nomor telepon"
-                className="h-11"
-                disabled={isSaving}
-              />
-              {combinedErrors.telepon && (
-                <p className="text-xs text-red-500">{combinedErrors.telepon}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="email" className="text-sm text-gray-700">
-                Email <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => handleChange("email", e.target.value)}
-                placeholder="Masukkan email"
-                className="h-11"
-                disabled={isSaving}
-              />
-              {combinedErrors.email && (
-                <p className="text-xs text-red-500">{combinedErrors.email}</p>
-              )}
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="username" className="text-sm text-gray-700">
-                Username <span className="text-red-500">*</span>
-              </Label>
-              <Input
-                id="username"
-                value={formData.username}
-                onChange={(e) => handleChange("username", e.target.value)}
-                placeholder="Masukkan username"
-                className="h-11"
-                disabled={isSaving}
-              />
-              {combinedErrors.username && (
-                <p className="text-xs text-red-500">{combinedErrors.username}</p>
-              )}
             </div>
           </div>
 
@@ -379,7 +344,7 @@ export function EditProfileModal({
             </Button>
             <Button
               type="submit"
-              className="h-11 px-6 bg-blue-600 text-white hover:bg-blue-700"
+              className="h-11 px-6 bg-navy text-white hover:bg-navy/90"
               disabled={isSaving}
             >
               {isSaving ? "Menyimpan..." : "Simpan Perubahan"}

@@ -11,23 +11,26 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useState } from "react";
 
+const EMPTY_FORM = {
+  description: "",
+  deskripsi: "",
+};
+
 export function FindingAddModal({ isOpen, onClose, onSave }) {
-  const [formData, setFormData] = useState({
-    deskripsi: "",
-  });
+  const [formData, setFormData] = useState(() => ({ ...EMPTY_FORM }));
   const [hasInteracted, setHasInteracted] = useState({
     deskripsi: false,
   });
 
+  const descriptionValue = formData.description ?? formData.deskripsi ?? "";
+
   const handleSubmit = (e) => {
     e.preventDefault();
     if (onSave) {
-      onSave(formData);
+      onSave({ ...formData, description: descriptionValue, deskripsi: descriptionValue });
     }
     // Reset form
-    setFormData({
-      deskripsi: "",
-    });
+    setFormData({ ...EMPTY_FORM });
     setHasInteracted({
       deskripsi: false,
     });
@@ -35,9 +38,7 @@ export function FindingAddModal({ isOpen, onClose, onSave }) {
   };
 
   const handleCancel = () => {
-    setFormData({
-      deskripsi: "",
-    });
+    setFormData({ ...EMPTY_FORM });
     setHasInteracted({
       deskripsi: false,
     });
@@ -46,7 +47,7 @@ export function FindingAddModal({ isOpen, onClose, onSave }) {
 
   const handleInputFocus = (field) => {
     if (!hasInteracted[field]) {
-      setFormData({ ...formData, [field]: "" });
+      setFormData({ ...formData, description: "", deskripsi: "" });
       setHasInteracted({ ...hasInteracted, [field]: true });
     }
   };
@@ -73,8 +74,11 @@ export function FindingAddModal({ isOpen, onClose, onSave }) {
               <Textarea
                 id="deskripsi"
                 placeholder="Masukkan Temuan Ketidaksesuaian"
-                value={formData.deskripsi}
-                onChange={(e) => setFormData({ ...formData, deskripsi: e.target.value })}
+                value={descriptionValue}
+                onChange={(e) => {
+                  const nextValue = e.target.value;
+                  setFormData({ ...formData, description: nextValue, deskripsi: nextValue });
+                }}
                 onFocus={() => handleInputFocus("deskripsi")}
                 className="min-h-[120px] resize-none border-gray-300 focus-visible:border-black! focus-visible:border-2! focus-visible:ring-0!"
               />

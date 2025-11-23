@@ -16,86 +16,95 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ChevronDown } from "lucide-react";
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { CASE_STATUS } from "../../constants";
+import { useAdminUsers } from "../../hooks/useNCRQueries";
+
+const createInitialFormData = () => ({
+  ncrNumber: "",
+  location: "",
+  ncrDate: "",
+  referencesStandard: "",
+  clause: "",
+  auditorName: "",
+  auditorId: "",
+  auditeeName: "",
+  auditeeId: "",
+  status: "",
+  findingCategory: "minor",
+  targetDate: "",
+  completionDate: "",
+});
+
+const createInitialErrors = () => ({
+  auditorId: "",
+  auditeeId: "",
+});
 
 export function CaseAddModal({ isOpen, onClose, onSave }) {
-  const [formData, setFormData] = useState({
-    id: "",
-    bagianTerkait: "",
-    tanggal: "",
-    standarReferensi: "",
-    klasifikasi: "",
-    namaAuditor: "",
-    namaAuditee: "",
-    status: "",
+  const [formData, setFormData] = useState(() => createInitialFormData());
+  const [errors, setErrors] = useState(() => createInitialErrors());
+  const { data: adminUsersResponse, isLoading: isAdminUsersLoading } = useAdminUsers({
+    per_page: 100,
+    status: "active",
   });
-  const [hasInteracted, setHasInteracted] = useState({
-    id: false,
-    bagianTerkait: false,
-    tanggal: false,
-    standarReferensi: false,
-    klasifikasi: false,
-  });
+
+  const adminUsers = useMemo(() => adminUsersResponse?.data ?? [], [adminUsersResponse]);
+
+  const getUserDisplayName = (user = {}) => {
+    if (user.full_name) return user.full_name;
+    if (user.fullName) return user.fullName;
+    if (user.first_name || user.last_name) {
+      return [user.first_name, user.last_name].filter(Boolean).join(" ");
+    }
+    return user.username || user.email || "Pengguna";
+  };
+
+  const resetForm = () => {
+    setFormData(createInitialFormData());
+    setErrors(createInitialErrors());
+  };
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    const validationErrors = {
+      auditorId: formData.auditorId ? "" : "Auditor harus dipilih",
+      auditeeId: formData.auditeeId ? "" : "Auditee harus dipilih",
+    };
+
+    setErrors(validationErrors);
+
+    const hasError = Object.values(validationErrors).some(Boolean);
+    if (hasError) {
+      return;
+    }
+
     if (onSave) {
       onSave(formData);
     }
-    // Reset form
-    setFormData({
-      id: "",
-      bagianTerkait: "",
-      tanggal: "",
-      standarReferensi: "",
-      klasifikasi: "",
-      namaAuditor: "",
-      namaAuditee: "",
-      status: "",
-    });
-    setHasInteracted({
-      id: false,
-      bagianTerkait: false,
-      tanggal: false,
-      standarReferensi: false,
-      klasifikasi: false,
-    });
+
+    resetForm();
     onClose();
   };
 
   const handleCancel = () => {
-    setFormData({
-      id: "",
-      bagianTerkait: "",
-      tanggal: "",
-      standarReferensi: "",
-      klasifikasi: "",
-      namaAuditor: "",
-      namaAuditee: "",
-      status: "",
-    });
-    setHasInteracted({
-      id: false,
-      bagianTerkait: false,
-      tanggal: false,
-      standarReferensi: false,
-      klasifikasi: false,
-    });
+    resetForm();
     onClose();
   };
 
   const handleInputChange = (field, value) => {
-    setFormData({ ...formData, [field]: value });
-    if (!hasInteracted[field]) {
-      setHasInteracted({ ...hasInteracted, [field]: true });
-    }
+    setFormData((prev) => ({ ...prev, [field]: value }));
   };
 
-  const handleInputFocus = (field) => {
-    if (!hasInteracted[field]) {
-      setFormData({ ...formData, [field]: "" });
-    }
+  const handleSelectUser = (type, user) => {
+    const displayName = getUserDisplayName(user);
+    const fieldKey = type === "auditor" ? "auditorId" : "auditeeId";
+    setFormData((prev) => ({
+      ...prev,
+      [type === "auditor" ? "auditorId" : "auditeeId"]: user.id,
+      [type === "auditor" ? "auditorName" : "auditeeName"]: displayName,
+    }));
+    setErrors((prev) => ({ ...prev, [fieldKey]: "" }));
   };
 
   return (
@@ -113,30 +122,28 @@ export function CaseAddModal({ isOpen, onClose, onSave }) {
 
           <div className="space-y-6 py-4">
             <div className="space-y-2">
-              <Label htmlFor="id" className="text-sm text-gray-dark">
+              <Label htmlFor="ncrNumber" className="text-sm text-gray-dark">
                 Nomor NCR
               </Label>
               <Input
-                id="id"
-                value={formData.id}
-                onChange={(e) => handleInputChange("id", e.target.value)}
-                onFocus={() => handleInputFocus("id")}
+                id="ncrNumber"
+                value={formData.ncrNumber}
+                onChange={(e) => handleInputChange("ncrNumber", e.target.value)}
                 className="w-full bg-gray-light border-gray-300 focus:border-black focus:border-2 focus-visible:ring-0"
-                placeholder="Masukkan Nomor NCR"
+                placeholder="NCR-2025-0001"
                 required
               />
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label htmlFor="bagianTerkait" className="text-sm text-gray-dark">
+                <Label htmlFor="location" className="text-sm text-gray-dark">
                   Bagian/Lokasi
                 </Label>
                 <Input
-                  id="bagianTerkait"
-                  value={formData.bagianTerkait}
-                  onChange={(e) => handleInputChange("bagianTerkait", e.target.value)}
-                  onFocus={() => handleInputFocus("bagianTerkait")}
+                  id="location"
+                  value={formData.location}
+                  onChange={(e) => handleInputChange("location", e.target.value)}
                   className="w-full bg-gray-light border-gray-300 focus:border-black focus:border-2 focus-visible:ring-0"
                   placeholder="Masukkan Bagian/Lokasi"
                   required
@@ -144,53 +151,82 @@ export function CaseAddModal({ isOpen, onClose, onSave }) {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="tanggal" className="text-sm text-gray-dark">
-                  Tanggal
+                <Label htmlFor="ncrDate" className="text-sm text-gray-dark">
+                  Tanggal NCR
                 </Label>
                 <Input
-                  id="tanggal"
-                  value={formData.tanggal}
-                  onChange={(e) => handleInputChange("tanggal", e.target.value)}
-                  onFocus={() => handleInputFocus("tanggal")}
+                  id="ncrDate"
+                  type="date"
+                  value={formData.ncrDate}
+                  onChange={(e) => handleInputChange("ncrDate", e.target.value)}
                   className="w-full bg-gray-light border-gray-300 focus:border-black focus:border-2 focus-visible:ring-0"
-                  placeholder="10/09/2025"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="referencesStandard" className="text-sm text-gray-dark">
+                  Standar Referensi
+                </Label>
+                <Input
+                  id="referencesStandard"
+                  value={formData.referencesStandard}
+                  onChange={(e) => handleInputChange("referencesStandard", e.target.value)}
+                  className="w-full bg-gray-light border-gray-300 focus:border-black focus:border-2 focus-visible:ring-0"
+                  placeholder="ISO 27001:2022"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="clause" className="text-sm text-gray-dark">
+                  Klausul
+                </Label>
+                <Input
+                  id="clause"
+                  value={formData.clause}
+                  onChange={(e) => handleInputChange("clause", e.target.value)}
+                  className="w-full bg-gray-light border-gray-300 focus:border-black focus:border-2 focus-visible:ring-0"
+                  placeholder="6.5.1"
+                  required
+                />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-4">
+              <div className="space-y-2">
+                <Label htmlFor="targetDate" className="text-sm text-gray-dark">
+                  Tanggal Target
+                </Label>
+                <Input
+                  id="targetDate"
+                  type="date"
+                  value={formData.targetDate}
+                  onChange={(e) => handleInputChange("targetDate", e.target.value)}
+                  className="w-full bg-gray-light border-gray-300 focus:border-black focus:border-2 focus-visible:ring-0"
+                  required
+                />
+              </div>
+
+              <div className="space-y-2">
+                <Label htmlFor="completionDate" className="text-sm text-gray-dark">
+                  Tanggal Penyelesaian
+                </Label>
+                <Input
+                  id="completionDate"
+                  type="date"
+                  value={formData.completionDate}
+                  onChange={(e) => handleInputChange("completionDate", e.target.value)}
+                  className="w-full bg-gray-light border-gray-300 focus:border-black focus:border-2 focus-visible:ring-0"
                   required
                 />
               </div>
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="standarReferensi" className="text-sm text-gray-dark">
-                Standar Referensi
-              </Label>
-              <Input
-                id="standarReferensi"
-                value={formData.standarReferensi}
-                onChange={(e) => handleInputChange("standarReferensi", e.target.value)}
-                onFocus={() => handleInputFocus("standarReferensi")}
-                className="w-full bg-gray-light border-gray-300 focus:border-black focus:border-2 focus-visible:ring-0"
-                placeholder="Masukkan Standar Referensi"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="klasifikasi" className="text-sm text-gray-dark">
-                Klausul
-              </Label>
-              <Input
-                id="klasifikasi"
-                value={formData.klasifikasi}
-                onChange={(e) => handleInputChange("klasifikasi", e.target.value)}
-                onFocus={() => handleInputFocus("klasifikasi")}
-                className="w-full bg-gray-light border-gray-300 focus:border-black focus:border-2 focus-visible:ring-0"
-                placeholder="Masukkan Klausul"
-                required
-              />
-            </div>
-
-            <div className="space-y-2">
-              <Label htmlFor="namaAuditor" className="text-sm text-gray-dark">
+              <Label htmlFor="auditorName" className="text-sm text-gray-dark">
                 Pilih Auditor
               </Label>
               <DropdownMenu>
@@ -200,28 +236,33 @@ export function CaseAddModal({ isOpen, onClose, onSave }) {
                     variant="outline"
                     className="w-full justify-between bg-gray-light border-gray-300 h-10"
                   >
-                    <span className={formData.namaAuditor ? "text-navy" : "text-gray-400"}>
-                      {formData.namaAuditor || "Pilih Auditor"}
+                    <span className={formData.auditorName ? "text-navy" : "text-gray-400"}>
+                      {formData.auditorName || "Pilih Auditor"}
                     </span>
                     <ChevronDown className="h-4 w-4 opacity-50" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-full">
-                  <DropdownMenuItem onClick={() => handleInputChange("namaAuditor", "Cakrawerdaya")}>
-                    Cakrawerdaya
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleInputChange("namaAuditor", "John Doe")}>
-                    John Doe
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleInputChange("namaAuditor", "Jane Smith")}>
-                    Jane Smith
-                  </DropdownMenuItem>
+                <DropdownMenuContent className="w-full max-h-64 overflow-y-auto">
+                  {isAdminUsersLoading ? (
+                    <DropdownMenuItem disabled>Memuat daftar pengguna...</DropdownMenuItem>
+                  ) : adminUsers.length === 0 ? (
+                    <DropdownMenuItem disabled>Tidak ada pengguna tersedia</DropdownMenuItem>
+                  ) : (
+                    adminUsers.map((user) => (
+                      <DropdownMenuItem key={user.id} onClick={() => handleSelectUser("auditor", user)}>
+                        {getUserDisplayName(user)}
+                      </DropdownMenuItem>
+                    ))
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
+              {errors.auditorId && (
+                <p className="text-sm text-red-500">{errors.auditorId}</p>
+              )}
             </div>
 
             <div className="space-y-2">
-              <Label htmlFor="namaAuditee" className="text-sm text-gray-dark">
+              <Label htmlFor="auditeeName" className="text-sm text-gray-dark">
                 Pilih Auditee
               </Label>
               <DropdownMenu>
@@ -231,24 +272,29 @@ export function CaseAddModal({ isOpen, onClose, onSave }) {
                     variant="outline"
                     className="w-full justify-between bg-gray-light border-gray-300 h-10"
                   >
-                    <span className={formData.namaAuditee ? "text-navy" : "text-gray-400"}>
-                      {formData.namaAuditee || "Pilih Auditee"}
+                    <span className={formData.auditeeName ? "text-navy" : "text-gray-400"}>
+                      {formData.auditeeName || "Pilih Auditee"}
                     </span>
                     <ChevronDown className="h-4 w-4 opacity-50" />
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent className="w-full">
-                  <DropdownMenuItem onClick={() => handleInputChange("namaAuditee", "Rasiban")}>
-                    Rasiban
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleInputChange("namaAuditee", "Ahmad")}>
-                    Ahmad
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleInputChange("namaAuditee", "Budi")}>
-                    Budi
-                  </DropdownMenuItem>
+                <DropdownMenuContent className="w-full max-h-64 overflow-y-auto">
+                  {isAdminUsersLoading ? (
+                    <DropdownMenuItem disabled>Memuat daftar pengguna...</DropdownMenuItem>
+                  ) : adminUsers.length === 0 ? (
+                    <DropdownMenuItem disabled>Tidak ada pengguna tersedia</DropdownMenuItem>
+                  ) : (
+                    adminUsers.map((user) => (
+                      <DropdownMenuItem key={`auditee-${user.id}`} onClick={() => handleSelectUser("auditee", user)}>
+                        {getUserDisplayName(user)}
+                      </DropdownMenuItem>
+                    ))
+                  )}
                 </DropdownMenuContent>
               </DropdownMenu>
+              {errors.auditeeId && (
+                <p className="text-sm text-red-500">{errors.auditeeId}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -269,14 +315,17 @@ export function CaseAddModal({ isOpen, onClose, onSave }) {
                   </Button>
                 </DropdownMenuTrigger>
                 <DropdownMenuContent className="w-full">
-                  <DropdownMenuItem onClick={() => handleInputChange("status", CASE_STATUS.PENDING)}>
-                    {CASE_STATUS.PENDING}
+                  <DropdownMenuItem onClick={() => handleInputChange("status", CASE_STATUS.DRAFT)}>
+                    Draft
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleInputChange("status", CASE_STATUS.IN_PROGRESS)}>
+                    In Progress
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => handleInputChange("status", CASE_STATUS.REVIEWED)}>
+                    Reviewed
                   </DropdownMenuItem>
                   <DropdownMenuItem onClick={() => handleInputChange("status", CASE_STATUS.APPROVED)}>
-                    {CASE_STATUS.APPROVED}
-                  </DropdownMenuItem>
-                  <DropdownMenuItem onClick={() => handleInputChange("status", CASE_STATUS.REJECTED)}>
-                    {CASE_STATUS.REJECTED}
+                    Approved
                   </DropdownMenuItem>
                 </DropdownMenuContent>
               </DropdownMenu>
@@ -296,7 +345,7 @@ export function CaseAddModal({ isOpen, onClose, onSave }) {
               type="submit"
               className="h-12 px-6 bg-navy text-white hover:bg-navy-hover"
             >
-              Simpan Dokumen
+              Simpan Kasus
             </Button>
           </DialogFooter>
         </form>

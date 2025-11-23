@@ -1,10 +1,63 @@
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { usePageTemplate } from "@/hooks/usePageTemplate";
 import { Button } from "@/components/ui/button";
-import { Plus, Pencil } from "lucide-react";
+import { Plus, Pencil, Loader2 } from "lucide-react";
 import { ListCard } from "./components/common";
 import { ResponseItemModal, ResponseDeleteModal, DateEditModal, VerificationModal } from "./components/response";
+import { 
+  useNCRPoints, 
+  useNCRCase,
+  useCreateNCRPoint,
+  useUpdateNCRPoint,
+  useDeleteNCRPoint,
+  useUpdateNCRCase
+} from "./hooks/useNCRQueries";
+
+const POINT_TYPE_MAP = {
+  finding: "uraian",
+  analysis: "analisa",
+  correction: "koreksi",
+  corrective_action: "tindakan",
+  uraian: "uraian",
+  analisa: "analisa",
+  koreksi: "koreksi",
+  tindakan: "tindakan",
+};
+
+const normalizePointType = (value) => {
+  if (!value) return undefined;
+  const normalized = String(value).toLowerCase();
+  return POINT_TYPE_MAP[normalized] ?? normalized;
+};
+
+const extractPointItems = (payload, expectedType) => {
+  if (!payload) return [];
+  const normalizedTarget = normalizePointType(expectedType);
+  const containers = Array.isArray(payload.points)
+    ? payload.points
+    : Array.isArray(payload.data)
+    ? payload.data
+    : Array.isArray(payload)
+    ? payload
+    : [];
+
+  if (!containers.length) return [];
+
+  const isGrouped = containers.some((group) => Array.isArray(group?.items));
+
+  if (!isGrouped) {
+    return containers;
+  }
+
+  const matched = normalizedTarget
+    ? containers.find(
+        (group) => normalizePointType(group.point_type) === normalizedTarget
+      )
+    : containers[0];
+
+  return matched?.items ?? [];
+};
 
 export default function ResponsePage() {
   usePageTemplate({
@@ -19,62 +72,129 @@ export default function ResponsePage() {
   const navigate = useNavigate();
   const { id, caseId } = useParams();
 
-  // Mock data - in real app, fetch based on caseId
-  const caseDetail = {
-    ncrTitle: "NCR Dokumen 1",
-    caseNumber: "010101",
+  // Fetch case details
+  const { data: caseData, isLoading: isCaseLoading } = useNCRCase(caseId);
+
+  const caseInfo = useMemo(() => {
+    if (!caseData) return {};
+    return caseData.case ?? caseData.data ?? caseData;
+  }, [caseData]);
+  const documentTitle =
+    caseInfo.document_title || caseInfo.ncr_document?.title || "NCR Dokumen";
+
+  // Fetch findings
+  const { data: findingsData } = useNCRPoints(caseId, { point_type: "finding" });
+  
+  // Fetch analyses
+  const { data: analysesData, isLoading: isAnalysesLoading } = useNCRPoints(caseId, { point_type: "analysis" });
+  
+  // Fetch corrections
+  const { data: correctionsData, isLoading: isCorrectionsLoading } = useNCRPoints(caseId, { point_type: "correction" });
+  
+  // Fetch corrective actions
+  const { data: correctiveActionsData, isLoading: isActionsLoading } = useNCRPoints(caseId, { point_type: "corrective_action" });
+
+  const createMutation = useCreateNCRPoint();
+  const updateMutation = useUpdateNCRPoint();
+  const deleteMutation = useDeleteNCRPoint();
+  const updateCaseMutation = useUpdateNCRCase();
+
+  const auditeeId =
+    caseInfo.id_auditee ??
+    caseInfo.auditee_id ??
+    caseInfo.auditeeId ??
+    caseInfo.auditee_uuid ??
+    caseInfo.auditeeUuid ??
+    caseInfo.auditee?.id ??
+    caseInfo.auditee?.uuid ??
+    "";
+  const isAuditeeMissing = !auditeeId;
+
+  const ensureAuditeeAvailable = () => {
+    if (!isAuditeeMissing) return true;
+    alert(
+      "Data auditee kasus belum tersedia. Mohon muat ulang halaman atau perbarui data kasus terlebih dahulu."
+    );
+    return false;
   };
 
-  const [targetDate, setTargetDate] = useState("8/1/2025");
-  const [findings, setFindings] = useState([
-    {
-      id: 1,
-      kategori: "Kategori Temuan Audit - Minor",
-      deskripsi: "Organisasi PT. ABC belum adanya SDM IT khususnya pada bidang artefaktif IT, organisasi hanya memiliki SDM IT Support",
-    },
-    {
-      id: 2,
-      kategori: "Kategori Temuan Audit - Minor",
-      deskripsi: "Organisasi PT. ABC belum adanya SDM IT khususnya pada bidang artefaktif IT, organisasi hanya memiliki SDM IT Support",
-    },
-  ]);
+  const formatDate = (value) => {
+    if (!value) return "-";
+    const date = value instanceof Date ? value : new Date(value);
+    if (Number.isNaN(date.getTime())) return "-";
+    return date.toLocaleDateString("id-ID");
+  };
 
-  const [analyses, setAnalyses] = useState([
-    {
-      id: 1,
-      deskripsi: "Organisasi masih baru dan di rasa belum dibutuhkan secara operasional dan tenaga kerja yang berkerja existing secara otodidak",
-    },
-    {
-      id: 2,
-      deskripsi: "Organisasi PT. ABC belum adanya SDM IT khususnya pada bidang artefaktif IT, organisasi hanya memiliki SDM IT Support",
-    },
-  ]);
+  const caseDetail = useMemo(() => {
+    return {
+      ncrTitle: documentTitle,
+      caseNumber:
+        caseInfo?.case_number ||
+        caseInfo?.ncr_number ||
+        caseInfo?.ncrNumber ||
+        caseInfo?.id ||
+        "-",
+      targetDate: formatDate(caseInfo?.target_date || caseInfo?.targetDate),
+    };
+  }, [caseInfo, documentTitle]);
 
-  const [corrections, setCorrections] = useState([
-    {
-      id: 1,
-      deskripsi: "organisasi harus merekrut SDM IT profesional",
-    },
-    {
-      id: 2,
-      deskripsi: "organisasi harus merekrut SDM IT profesional",
-    },
-  ]);
+  const derivedVerificationData = useMemo(() => {
+    const verificationNote = caseInfo?.verification_note || caseInfo?.verificationNote;
+    const verificationDate = caseInfo?.verification_date || caseInfo?.verificationDate;
+    const verifiedByValue = caseInfo?.verified_by || caseInfo?.verifiedBy;
+    const verifierName =
+      typeof verifiedByValue === "string"
+        ? verifiedByValue
+        : verifiedByValue?.name || "";
 
-  const [correctiveActions, setCorrectiveActions] = useState([
-    {
-      id: 1,
-      deskripsi: "organisasi akan Menyusun struktur organisasi",
-    },
-    {
-      id: 2,
-      deskripsi: "organisasi akan membuat job requirement",
-    },
-    {
-      id: 3,
-      deskripsi: "melakukan rekrutmen sesuai koreksi",
-    },
-  ]);
+    if (!verificationNote && !verificationDate && !verifierName) {
+      return null;
+    }
+
+    return {
+      namaPemverifikasi: verifierName || "-",
+      tanggalPemverifikasi: formatDate(caseInfo?.verified_at || verificationDate),
+      tanggalVerifikasi: formatDate(verificationDate),
+      catatanVerifikasi: verificationNote || "-",
+    };
+  }, [caseInfo]);
+
+  const findings = useMemo(() => {
+    const items = extractPointItems(findingsData, "finding");
+    return items.map(f => ({
+      id: f.id,
+      kategori: f.category || "Kategori Temuan",
+      deskripsi: f.description || f.deskripsi || "",
+      description: f.description || f.deskripsi || "",
+    }));
+  }, [findingsData]);
+
+  const analyses = useMemo(() => {
+    const items = extractPointItems(analysesData, "analysis");
+    return items.map(a => ({
+      id: a.id,
+      deskripsi: a.description || a.deskripsi || "",
+      description: a.description || a.deskripsi || "",
+    }));
+  }, [analysesData]);
+
+  const corrections = useMemo(() => {
+    const items = extractPointItems(correctionsData, "correction");
+    return items.map(c => ({
+      id: c.id,
+      deskripsi: c.description || c.deskripsi || "",
+      description: c.description || c.deskripsi || "",
+    }));
+  }, [correctionsData]);
+
+  const correctiveActions = useMemo(() => {
+    const items = extractPointItems(correctiveActionsData, "corrective_action");
+    return items.map(ca => ({
+      id: ca.id,
+      deskripsi: ca.description || ca.deskripsi || "",
+      description: ca.description || ca.deskripsi || "",
+    }));
+  }, [correctiveActionsData]);
 
   // Modal states
   const [isDateEditModalOpen, setIsDateEditModalOpen] = useState(false);
@@ -88,6 +208,10 @@ export default function ResponsePage() {
   const [selectedItem, setSelectedItem] = useState(null);
   const [verificationData, setVerificationData] = useState(null);
 
+  useEffect(() => {
+    setVerificationData(derivedVerificationData || null);
+  }, [derivedVerificationData]);
+
   const handleBack = () => {
     navigate(`/admin/ncr/${id}/kasus/${caseId}/temuan`);
   };
@@ -97,20 +221,41 @@ export default function ResponsePage() {
     setIsDateEditModalOpen(true);
   };
 
-  const handleSaveDate = (newDate) => {
-    setTargetDate(newDate);
-    console.log("Saving date:", newDate);
+  const handleSaveDate = async (newDate) => {
+    try {
+      await updateCaseMutation.mutateAsync({
+        caseId: caseId,
+        payload: {
+          target_date: newDate,
+        },
+      });
+      setIsDateEditModalOpen(false);
+    } catch (error) {
+      console.error("Gagal mengupdate tanggal target:", error);
+    }
   };
 
   // Analysis handlers
   const handleAddAnalysis = () => {
+    if (!ensureAuditeeAvailable()) return;
     setIsAnalysisModalOpen(true);
   };
 
-  const handleSaveAnalysis = (data) => {
-    const newId = Math.max(...analyses.map(a => a.id), 0) + 1;
-    setAnalyses([...analyses, { id: newId, deskripsi: data.deskripsi }]);
-    console.log("Saving analysis:", data);
+  const handleSaveAnalysis = async (data) => {
+    if (!ensureAuditeeAvailable()) return;
+
+    try {
+      await createMutation.mutateAsync({
+        caseId: caseId,
+        ncr_case_id: caseId,
+        point_type: "analysis",
+        description: data.description || data.deskripsi,
+        auditeeId,
+      });
+      setIsAnalysisModalOpen(false);
+    } catch (error) {
+      console.error("Gagal menambah analisis:", error);
+    }
   };
 
   const handleDeleteAnalysis = (analysis) => {
@@ -118,20 +263,40 @@ export default function ResponsePage() {
     setIsAnalysisDeleteModalOpen(true);
   };
 
-  const handleConfirmDeleteAnalysis = (analysis) => {
-    setAnalyses(analyses.filter(a => a.id !== analysis.id));
-    console.log("Deleting analysis:", analysis);
+  const handleConfirmDeleteAnalysis = async (analysis) => {
+    try {
+      await deleteMutation.mutateAsync({
+        pointId: analysis.id,
+        caseId: caseId,
+      });
+      setIsAnalysisDeleteModalOpen(false);
+      setSelectedItem(null);
+    } catch (error) {
+      console.error("Gagal menghapus analisis:", error);
+    }
   };
 
   // Correction handlers
   const handleAddCorrection = () => {
+    if (!ensureAuditeeAvailable()) return;
     setIsCorrectionModalOpen(true);
   };
 
-  const handleSaveCorrection = (data) => {
-    const newId = Math.max(...corrections.map(c => c.id), 0) + 1;
-    setCorrections([...corrections, { id: newId, deskripsi: data.deskripsi }]);
-    console.log("Saving correction:", data);
+  const handleSaveCorrection = async (data) => {
+    if (!ensureAuditeeAvailable()) return;
+
+    try {
+      await createMutation.mutateAsync({
+        caseId: caseId,
+        ncr_case_id: caseId,
+        point_type: "correction",
+        description: data.description || data.deskripsi,
+        auditeeId,
+      });
+      setIsCorrectionModalOpen(false);
+    } catch (error) {
+      console.error("Gagal menambah koreksi:", error);
+    }
   };
 
   const handleDeleteCorrection = (correction) => {
@@ -139,20 +304,40 @@ export default function ResponsePage() {
     setIsCorrectionDeleteModalOpen(true);
   };
 
-  const handleConfirmDeleteCorrection = (correction) => {
-    setCorrections(corrections.filter(c => c.id !== correction.id));
-    console.log("Deleting correction:", correction);
+  const handleConfirmDeleteCorrection = async (correction) => {
+    try {
+      await deleteMutation.mutateAsync({
+        pointId: correction.id,
+        caseId: caseId,
+      });
+      setIsCorrectionDeleteModalOpen(false);
+      setSelectedItem(null);
+    } catch (error) {
+      console.error("Gagal menghapus koreksi:", error);
+    }
   };
 
   // Corrective Action handlers
   const handleAddCorrectiveAction = () => {
+    if (!ensureAuditeeAvailable()) return;
     setIsCorrectiveActionModalOpen(true);
   };
 
-  const handleSaveCorrectiveAction = (data) => {
-    const newId = Math.max(...correctiveActions.map(a => a.id), 0) + 1;
-    setCorrectiveActions([...correctiveActions, { id: newId, deskripsi: data.deskripsi }]);
-    console.log("Saving corrective action:", data);
+  const handleSaveCorrectiveAction = async (data) => {
+    if (!ensureAuditeeAvailable()) return;
+
+    try {
+      await createMutation.mutateAsync({
+        caseId: caseId,
+        ncr_case_id: caseId,
+        point_type: "corrective_action",
+        description: data.description || data.deskripsi,
+        auditeeId,
+      });
+      setIsCorrectiveActionModalOpen(false);
+    } catch (error) {
+      console.error("Gagal menambah tindakan koreksi:", error);
+    }
   };
 
   const handleDeleteCorrectiveAction = (action) => {
@@ -160,19 +345,38 @@ export default function ResponsePage() {
     setIsCorrectiveActionDeleteModalOpen(true);
   };
 
-  const handleConfirmDeleteCorrectiveAction = (action) => {
-    setCorrectiveActions(correctiveActions.filter(a => a.id !== action.id));
-    console.log("Deleting corrective action:", action);
+  const handleConfirmDeleteCorrectiveAction = async (action) => {
+    try {
+      await deleteMutation.mutateAsync({
+        pointId: action.id,
+        caseId: caseId,
+      });
+      setIsCorrectiveActionDeleteModalOpen(false);
+      setSelectedItem(null);
+    } catch (error) {
+      console.error("Gagal menghapus tindakan koreksi:", error);
+    }
   };
 
   const handleSubmitVerification = () => {
     setIsVerificationModalOpen(true);
   };
 
-  const handleSaveVerification = (data) => {
-    setVerificationData(data);
-    console.log("Saving verification:", data);
-    // TODO: Implement API call to save verification
+  const handleSaveVerification = async (data) => {
+    try {
+      await updateCaseMutation.mutateAsync({
+        caseId: caseId,
+        payload: {
+          verification_note: data.catatanVerifikasi,
+          verification_date: data.tanggalVerifikasi,
+          verified_by: data.verifiedBy,
+        },
+      });
+      setVerificationData(data);
+      setIsVerificationModalOpen(false);
+    } catch (error) {
+      console.error("Gagal menyimpan verifikasi:", error);
+    }
   };
 
   return (
@@ -225,19 +429,26 @@ export default function ResponsePage() {
       <h2 className="text-xl font-bold text-navy">Tanggapan Temuan</h2>
 
       {/* Uraian Ketidaksesuaian Section */}
-      <ListCard
-        title="Uraian Ketidaksesuaian :"
-        bgColor="bg-yellow-50"
-        borderColor="border-yellow-200"
-        badge={
-          <div className="bg-white border border-gray-300 rounded px-3 py-1 inline-block">
-            <p className="text-sm text-gray-700">{findings[0]?.kategori}</p>
-          </div>
-        }
-        items={findings}
-        showDelete={false}
-        actions={[]}
-      />
+      {isCaseLoading ? (
+        <div className="bg-white rounded-lg border border-gray-300 p-8 text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-navy" />
+          <p className="text-gray-600">Memuat data...</p>
+        </div>
+      ) : (
+        <ListCard
+          title="Uraian Ketidaksesuaian :"
+          bgColor="bg-yellow-50"
+          borderColor="border-yellow-200"
+          badge={
+            <div className="bg-white border border-gray-300 rounded px-3 py-1 inline-block">
+              <p className="text-sm text-gray-700">{findings[0]?.kategori || "Kategori Temuan"}</p>
+            </div>
+          }
+          items={findings}
+          showDelete={false}
+          actions={[]}
+        />
+      )}
 
       {/* Tanggal Target Perbaikan Section */}
       <div className="bg-cyan-50 border border-cyan-200 rounded-lg p-4">
@@ -253,62 +464,86 @@ export default function ResponsePage() {
             Edit Tanggal Target Perbaikan
           </Button>
         </div>
-        <p className="text-base text-navy font-medium">{targetDate}</p>
+        <p className="text-base text-navy font-medium">{caseDetail.targetDate}</p>
       </div>
 
       {/* Analisis Penyebab Ketidaksesuaian Section */}
-      <ListCard
-        title="Analisis Penyebab Ketidaksesuaian :"
-        bgColor="bg-blue-50"
-        borderColor="border-blue-200"
-        items={analyses}
-        onDelete={handleDeleteAnalysis}
-        showDelete={true}
-        actions={[
-          {
-            icon: Plus,
-            label: "Tambah Analisis",
-            onClick: handleAddAnalysis,
-            className: "bg-blue-600 text-white hover:bg-blue-700"
-          }
-        ]}
-      />
+      {isAnalysesLoading ? (
+        <div className="bg-white rounded-lg border border-gray-300 p-8 text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-navy" />
+          <p className="text-gray-600">Memuat analisis...</p>
+        </div>
+      ) : (
+        <ListCard
+          title="Analisis Penyebab Ketidaksesuaian :"
+          bgColor="bg-blue-50"
+          borderColor="border-blue-200"
+          items={analyses}
+          onDelete={handleDeleteAnalysis}
+          showDelete={true}
+          actions={[
+            {
+              icon: Plus,
+              label: "Tambah Analisis",
+              onClick: handleAddAnalysis,
+              className: "bg-blue-600 text-white hover:bg-blue-700",
+              disabled: isCaseLoading || isAuditeeMissing,
+            }
+          ]}
+        />
+      )}
 
       {/* Koreksi Section */}
-      <ListCard
-        title="Koreksi:"
-        bgColor="bg-blue-50"
-        borderColor="border-blue-200"
-        items={corrections}
-        onDelete={handleDeleteCorrection}
-        showDelete={true}
-        actions={[
-          {
-            icon: Plus,
-            label: "Tambah Koreksi",
-            onClick: handleAddCorrection,
-            className: "bg-blue-600 text-white hover:bg-blue-700"
-          }
-        ]}
-      />
+      {isCorrectionsLoading ? (
+        <div className="bg-white rounded-lg border border-gray-300 p-8 text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-navy" />
+          <p className="text-gray-600">Memuat koreksi...</p>
+        </div>
+      ) : (
+        <ListCard
+          title="Koreksi:"
+          bgColor="bg-blue-50"
+          borderColor="border-blue-200"
+          items={corrections}
+          onDelete={handleDeleteCorrection}
+          showDelete={true}
+          actions={[
+            {
+              icon: Plus,
+              label: "Tambah Koreksi",
+              onClick: handleAddCorrection,
+              className: "bg-blue-600 text-white hover:bg-blue-700",
+              disabled: isCaseLoading || isAuditeeMissing,
+            }
+          ]}
+        />
+      )}
 
       {/* Tindakan Koreksi Section */}
-      <ListCard
-        title="Tindakan Koreksi:"
-        bgColor="bg-blue-50"
-        borderColor="border-blue-200"
-        items={correctiveActions}
-        onDelete={handleDeleteCorrectiveAction}
-        showDelete={true}
-        actions={[
-          {
-            icon: Plus,
-            label: "Tambah Tindakan Koreksi",
-            onClick: handleAddCorrectiveAction,
-            className: "bg-blue-600 text-white hover:bg-blue-700"
-          }
-        ]}
-      />
+      {isActionsLoading ? (
+        <div className="bg-white rounded-lg border border-gray-300 p-8 text-center">
+          <Loader2 className="h-8 w-8 animate-spin mx-auto mb-2 text-navy" />
+          <p className="text-gray-600">Memuat tindakan koreksi...</p>
+        </div>
+      ) : (
+        <ListCard
+          title="Tindakan Koreksi:"
+          bgColor="bg-blue-50"
+          borderColor="border-blue-200"
+          items={correctiveActions}
+          onDelete={handleDeleteCorrectiveAction}
+          showDelete={true}
+          actions={[
+            {
+              icon: Plus,
+              label: "Tambah Tindakan Koreksi",
+              onClick: handleAddCorrectiveAction,
+              className: "bg-blue-600 text-white hover:bg-blue-700",
+              disabled: isCaseLoading || isAuditeeMissing,
+            }
+          ]}
+        />
+      )}
 
       {/* Verification Card - Only show if verification data exists */}
       {verificationData && (
@@ -377,7 +612,7 @@ export default function ResponsePage() {
         isOpen={isDateEditModalOpen}
         onClose={() => setIsDateEditModalOpen(false)}
         onSave={handleSaveDate}
-        currentDate={targetDate}
+        currentDate={caseDetail.targetDate}
       />
 
       <ResponseItemModal
