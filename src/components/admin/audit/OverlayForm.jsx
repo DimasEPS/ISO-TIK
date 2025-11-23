@@ -75,9 +75,13 @@ export function OverlayForm({
 
     // Map status to backend enum
     const mapStatusToBackend = (status) => {
-      const statusStr = String(status || "draft").toLowerCase().trim();
+      const statusStr = String(status || "draft")
+        .toLowerCase()
+        .trim();
       if (statusStr === "in progress") return "in_progress";
-      if (["draft", "in_progress", "reviewed", "approved"].includes(statusStr)) {
+      if (
+        ["draft", "in_progress", "reviewed", "approved"].includes(statusStr)
+      ) {
         return statusStr;
       }
       return "draft";
@@ -94,10 +98,15 @@ export function OverlayForm({
     // Add optional fields only if they have values
     if (formData.tanggalAudit) {
       // Convert dd/mm/yyyy to yyyy-mm-dd for backend
-      const dateMatch = formData.tanggalAudit.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+      const dateMatch = formData.tanggalAudit.match(
+        /^(\d{1,2})\/(\d{1,2})\/(\d{4})$/
+      );
       if (dateMatch) {
         const [, day, month, year] = dateMatch;
-        payload.audit_period = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
+        payload.audit_period = `${year}-${month.padStart(
+          2,
+          "0"
+        )}-${day.padStart(2, "0")}`;
       } else {
         toast.warning("Format tanggal tidak valid", {
           description: "Gunakan format dd/mm/yyyy (contoh: 15/12/2025)",
@@ -120,7 +129,7 @@ export function OverlayForm({
 
     try {
       await onSubmit?.(payload);
-      
+
       // Success notification
       toast.success("Dokumen audit berhasil ditambahkan!", {
         description: `Dokumen "${formData.judul}" telah dibuat`,
@@ -139,8 +148,9 @@ export function OverlayForm({
       setIsOpen(false);
     } catch (error) {
       // Error notification with details
-      const errorMsg = error?.data?.message || error?.message || "Unknown error";
-      const errorDetails = error?.data?.errors 
+      const errorMsg =
+        error?.data?.message || error?.message || "Unknown error";
+      const errorDetails = error?.data?.errors
         ? Object.entries(error.data.errors)
             .map(([field, messages]) => `${field}: ${messages.join(", ")}`)
             .join("\n")

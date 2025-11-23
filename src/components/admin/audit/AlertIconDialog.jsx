@@ -85,7 +85,7 @@ export function AlertIconDialog({
       const dateMatch = auditDate.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
       if (dateMatch) {
         const [, day, month, year] = dateMatch;
-        auditDate = `${year}-${month.padStart(2, '0')}-${day.padStart(2, '0')}`;
+        auditDate = `${year}-${month.padStart(2, "0")}-${day.padStart(2, "0")}`;
       } else {
         toast.warning("Format tanggal tidak valid", {
           description: "Gunakan format dd/mm/yyyy (contoh: 15/12/2025)",
@@ -120,15 +120,16 @@ export function AlertIconDialog({
 
     try {
       await onUpdate({ documentId: row.id, payload });
-      
+
       toast.success("Dokumen audit berhasil diupdate!", {
         description: `Perubahan pada "${formData.judul}" telah disimpan`,
       });
-      
+
       setOpen(false);
     } catch (error) {
-      const errorMsg = error?.data?.message || error?.message || "Unknown error";
-      const errorDetails = error?.data?.errors 
+      const errorMsg =
+        error?.data?.message || error?.message || "Unknown error";
+      const errorDetails = error?.data?.errors
         ? Object.entries(error.data.errors)
             .map(([field, messages]) => `${field}: ${messages.join(", ")}`)
             .join("\n")
@@ -300,9 +301,7 @@ export function AlertIconDialog({
                   className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy"
                   placeholder="Contoh: 15/12/2025"
                 />
-                <p className="text-xs text-gray-500">
-                  Format: dd/mm/yyyy
-                </p>
+                <p className="text-xs text-gray-500">Format: dd/mm/yyyy</p>
               </div>
             </div>
 

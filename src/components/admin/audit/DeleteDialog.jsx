@@ -30,15 +30,16 @@ export function DeleteDialog({ row, onDelete, isDeleting, className = "" }) {
 
       try {
         await onDelete(row.id);
-        
+
         toast.success("Dokumen audit berhasil dihapus!", {
           description: `Dokumen "${expectedText}" telah dihapus`,
         });
-        
+
         setOpen(false);
         setConfirmText("");
       } catch (error) {
-        const errorMsg = error?.data?.message || error?.message || "Unknown error";
+        const errorMsg =
+          error?.data?.message || error?.message || "Unknown error";
         toast.error("Gagal menghapus dokumen", {
           description: errorMsg,
           duration: 7000,
