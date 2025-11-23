@@ -17,7 +17,11 @@ export default function LoginPage() {
     if (result.success) {
       navigate("/admin/dashboard");
     } else {
-      setErrors({ submit: result.error || "Username atau password salah" });
+      setErrors((prev) => ({
+        ...prev,
+        ...(result.fieldErrors || {}),
+        submit: result.error || "Username atau password salah",
+      }));
     }
   };
 

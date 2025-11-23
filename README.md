@@ -20,8 +20,9 @@ Aplikasi web untuk pengelolaan audit dan kepatuhan TIK. Admin dapat mengelola do
 ## Cara Menjalankan
 
 1. `npm install`
-2. `npm run dev`
-3. Buka URL yang ditampilkan (default Vite dev server).
+2. Salin `.env.example` menjadi `.env` lalu set `VITE_API_BASE_URL` ke alamat backend (default `http://localhost:8000`).
+3. `npm run dev`
+4. Buka URL yang ditampilkan (default Vite dev server).
 
 ## Build
 

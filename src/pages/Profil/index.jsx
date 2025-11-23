@@ -1,6 +1,6 @@
-import { useEffect, useState } from "react";
-import { useParams, useLocation } from "react-router-dom";
+import { useCallback, useEffect, useState } from "react";
 import { useAdminLayout } from "@/layouts/admin/AdminLayoutContext";
+import { useAuth } from "@/auth/context/AuthContext";
 import {
   ProfileCard,
   ActivityLogTable,
@@ -8,142 +8,345 @@ import {
   EditPasswordModal,
 } from "./components";
 import { useActivityLog } from "./hooks/useActivityLog";
-import { mockUserData, mockActivityLogData } from "./data";
+import { profileService } from "@/services/profileService";
+
+const mapProfileResponse = (payload) => {
+  if (!payload) return null;
+  const user = payload.user || {};
+  const profile = payload.profile || {};
+  return {
+    email: user.email || "",
+    username: user.username || "",
+    lastLogin: user.last_login,
+    roles: payload.roles || [],
+    nama: profile.full_name || "",
+    nip: profile.nip || "-",
+    jabatan: profile.job_title || "-",
+    departemen: profile.department || "-",
+    telepon: profile.phone || "-",
+    status: user.deleted_at ? "Nonaktif" : "Aktif",
+    createdAt: user.created_at || profile.created_at,
+    updatedAt: user.updated_at || profile.updated_at,
+    createdBy: user.assigned_by || "System",
+    avatar: profile.avatar_url || null,
+  };
+};
+
+const splitFullName = (fullName) => {
+  if (!fullName) {
+    return { firstName: "", lastName: "" };
+  }
+  const normalized = fullName.trim().replace(/\s+/g, " ");
+  if (!normalized) {
+    return { firstName: "", lastName: "" };
+  }
+  const parts = normalized.split(" ");
+  return {
+    firstName: parts[0],
+    lastName: parts.slice(1).join(" "),
+  };
+};
+
+const normalizeOptionalField = (value) => {
+  if (value === undefined || value === null) return "";
+  if (typeof value === "string") {
+    const trimmed = value.trim();
+    return trimmed === "-" ? "" : trimmed;
+  }
+  return String(value);
+};
+
+const mapProfileFieldErrors = (errors = {}) => {
+  const mapped = {};
+  if (errors.first_name?.[0]) mapped.nama = errors.first_name[0];
+  if (errors.last_name?.[0]) mapped.nama = errors.last_name[0];
+  if (errors.username?.[0]) mapped.username = errors.username[0];
+  if (errors.email?.[0]) mapped.email = errors.email[0];
+  if (errors.nip?.[0]) mapped.nip = errors.nip[0];
+  if (errors.job_title?.[0]) mapped.jabatan = errors.job_title[0];
+  if (errors.department?.[0]) mapped.departemen = errors.department[0];
+  if (errors.phone?.[0]) mapped.telepon = errors.phone[0];
+  if (errors.avatar?.[0]) mapped.avatar = errors.avatar[0];
+  return mapped;
+};
+
+const mapPasswordFieldErrors = (errors = {}) => {
+  const mapped = {};
+  if (errors.current_password?.[0]) mapped.currentPassword = errors.current_password[0];
+  if (errors.new_password?.[0]) mapped.newPassword = errors.new_password[0];
+  if (errors.confirm_new_password?.[0]) mapped.confirmPassword = errors.confirm_new_password[0];
+  return mapped;
+};
 
 export default function Profil() {
   const { setHeader } = useAdminLayout();
-  const { userId } = useParams();
-  const location = useLocation();
+  const { token, updateUserInfo } = useAuth();
   
-  // Get user data from location state or use mock data
-  const initialUserData = location.state?.user ? {
-    email: location.state.user.email || "",
-    username: location.state.user.username || "",
-    lastLogin: new Date().toISOString(),
-    roles: location.state.user.roles?.map(r => r.name) || [],
-    nama: location.state.user.lastName 
-      ? `${location.state.user.fullName} ${location.state.user.lastName}` 
-      : location.state.user.fullName,
-    nip: location.state.user.nip || "-",
-    jabatan: location.state.user.jabatan || "-",
-    departemen: location.state.user.departemen || "-",
-    telepon: location.state.user.telepon || "-",
-    status: location.state.user.status || "Aktif",
-    createdAt: location.state.user.createdAt || new Date().toISOString(),
-    updatedAt: new Date().toISOString(),
-    createdBy: "System",
-    avatar: null,
-  } : mockUserData;
-  
-  const [userData, setUserData] = useState(initialUserData);
-  const [activityLogs, setActivityLogs] = useState(mockActivityLogData);
+  const [userData, setUserData] = useState(null);
+  const [profileLoading, setProfileLoading] = useState(true);
+  const [profileError, setProfileError] = useState(null);
 
   const [isEditProfileModalOpen, setIsEditProfileModalOpen] = useState(false);
   const [isEditPasswordModalOpen, setIsEditPasswordModalOpen] = useState(false);
+  const [profileSaving, setProfileSaving] = useState(false);
+  const [profileFieldErrors, setProfileFieldErrors] = useState({});
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordFieldErrors, setPasswordFieldErrors] = useState({});
 
   const {
+    data: activityLogs,
     perPage,
     currentPage,
-    pagedData,
     totalData,
     totalPages,
+    loading: activityLoading,
+    error: activityError,
     handlePageChange,
     handlePaginateChange,
-  } = useActivityLog(activityLogs);
+  } = useActivityLog({ token });
+
+  const fetchProfile = useCallback(async () => {
+    if (!token) return;
+    setProfileLoading(true);
+    try {
+      const response = await profileService.getProfile({ token });
+      setUserData(mapProfileResponse(response));
+      setProfileError(null);
+    } catch (error) {
+      setProfileError(error.message || "Gagal memuat profil");
+      setUserData(null);
+    } finally {
+      setProfileLoading(false);
+    }
+  }, [token]);
 
   useEffect(() => {
     setHeader({
       title: "Profile Saya",
       subtitle: "Kelola informasi pribadi dan preferensi akun Anda",
       user: {
-        name: "Admin User",
-        role: "Administrator",
+        name: userData?.nama || "Pengguna",
+        role: userData?.roles?.[0] || "User",
         urlDetail: "/admin/profil",
       },
     });
-  }, [setHeader]);
+  }, [setHeader, userData]);
+
+  useEffect(() => {
+    fetchProfile();
+  }, [fetchProfile]);
 
   const handleEditProfile = () => {
+    setProfileFieldErrors({});
     setIsEditProfileModalOpen(true);
   };
 
   const handleEditPassword = () => {
+    setPasswordFieldErrors({});
     setIsEditPasswordModalOpen(true);
   };
 
-  const handleSaveProfile = (updatedData) => {
-    // TODO: Implement API call to update profile with FormData for file upload
-    console.log("Saving profile:", updatedData);
-    
-    // Prepare FormData if there's an avatar file
-    if (updatedData.avatar) {
-      const formData = new FormData();
-      formData.append('avatar', updatedData.avatar);
-      Object.keys(updatedData).forEach(key => {
-        if (key !== 'avatar' && key !== 'avatarPreview') {
-          formData.append(key, updatedData[key]);
-        }
-      });
-      console.log("FormData prepared with avatar file");
-      // TODO: API call with formData
-      // await api.post('/api/user/profile', formData, {
-      //   headers: { 'Content-Type': 'multipart/form-data' }
-      // });
-    }
-    
-    // Update local state with new data including avatar preview
-    const { avatar, ...dataWithoutFile } = updatedData;
-    setUserData((prev) => ({ 
-      ...prev, 
-      ...dataWithoutFile,
-      avatar: updatedData.avatarPreview || prev.avatar
-    }));
-    
+  const closeProfileModal = useCallback(() => {
     setIsEditProfileModalOpen(false);
-    alert("Profil berhasil diperbarui!");
+    setProfileFieldErrors({});
+  }, []);
+
+  const closePasswordModal = useCallback(() => {
+    setIsEditPasswordModalOpen(false);
+    setPasswordFieldErrors({});
+  }, []);
+
+  const clearProfileFieldError = useCallback((field) => {
+    setProfileFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }, []);
+
+  const clearPasswordFieldError = useCallback((field) => {
+    setPasswordFieldErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+  }, []);
+
+  const handleSaveProfile = async (updatedData) => {
+    if (!token || !updatedData) {
+      return { success: false };
+    }
+
+    const normalizedName = updatedData.nama?.trim() || "";
+    if (!normalizedName) {
+      setProfileFieldErrors((prev) => ({
+        ...prev,
+        nama: "Nama lengkap wajib diisi",
+      }));
+      return { success: false, errorMessage: "Nama lengkap wajib diisi" };
+    }
+
+    setProfileSaving(true);
+    setProfileFieldErrors({});
+
+    try {
+      await profileService.updateAccount({
+        token,
+        data: {
+          username: updatedData.username?.trim(),
+          email: updatedData.email?.trim(),
+        },
+      });
+      updateUserInfo({
+        username: updatedData.username?.trim(),
+        email: updatedData.email?.trim(),
+      });
+
+      const profileForm = new FormData();
+      const { firstName, lastName } = splitFullName(normalizedName);
+      if (!firstName) {
+        setProfileFieldErrors({ nama: "Nama lengkap wajib diisi" });
+        return { success: false, errorMessage: "Nama lengkap wajib diisi" };
+      }
+      profileForm.append("first_name", firstName);
+      profileForm.append("last_name", lastName || "");
+      profileForm.append("nip", normalizeOptionalField(updatedData.nip));
+      profileForm.append("job_title", normalizeOptionalField(updatedData.jabatan));
+      profileForm.append("department", normalizeOptionalField(updatedData.departemen));
+      profileForm.append("phone", normalizeOptionalField(updatedData.telepon));
+      if (updatedData.avatar) {
+        profileForm.append("avatar", updatedData.avatar);
+      }
+
+      const profileResponse = await profileService.updateProfile({
+        token,
+        data: profileForm,
+      });
+      setUserData(mapProfileResponse(profileResponse));
+      closeProfileModal();
+      alert("Profil berhasil diperbarui!");
+      return { success: true };
+    } catch (error) {
+      const backendErrors = error?.data?.errors || {};
+      const mappedErrors = mapProfileFieldErrors(backendErrors);
+      const fallbackMessage =
+        error?.data?.message || error?.message || "Gagal memperbarui profil";
+      if (!Object.keys(mappedErrors).length && fallbackMessage) {
+        mappedErrors.submit = fallbackMessage;
+      }
+      setProfileFieldErrors(mappedErrors);
+      return {
+        success: false,
+        errorMessage: fallbackMessage,
+      };
+    } finally {
+      setProfileSaving(false);
+    }
   };
 
-  const handleSavePassword = (passwordData) => {
-    // TODO: Implement API call to change password
-    console.log("Changing password:", passwordData);
-    setIsEditPasswordModalOpen(false);
-    // Show success notification
-    alert("Kata sandi berhasil diubah!");
+  const handleSavePassword = async (passwordData) => {
+    if (!token || !passwordData) {
+      return { success: false };
+    }
+
+    setPasswordSaving(true);
+    setPasswordFieldErrors({});
+
+    try {
+      await profileService.updatePassword({
+        token,
+        data: {
+          current_password: passwordData.currentPassword,
+          new_password: passwordData.newPassword,
+          confirm_new_password: passwordData.confirmPassword,
+        },
+      });
+      closePasswordModal();
+      alert("Kata sandi berhasil diubah!");
+      return { success: true };
+    } catch (error) {
+      const backendErrors = error?.data?.errors || {};
+      const mappedErrors = mapPasswordFieldErrors(backendErrors);
+      const fallbackMessage =
+        error?.data?.message || error?.message || "Gagal mengubah kata sandi";
+      if (!Object.keys(mappedErrors).length && fallbackMessage) {
+        mappedErrors.submit = fallbackMessage;
+      }
+      setPasswordFieldErrors(mappedErrors);
+      return {
+        success: false,
+        errorMessage: fallbackMessage,
+      };
+    } finally {
+      setPasswordSaving(false);
+    }
   };
 
   return (
     <div className="space-y-6">
       {/* Profile Card */}
-      <ProfileCard
-        user={userData}
-        onEditProfile={handleEditProfile}
-        onEditPassword={handleEditPassword}
-      />
+      {profileLoading ? (
+        <div className="bg-white rounded-lg border border-gray-200 p-6 text-gray-600">
+          Memuat profil...
+        </div>
+      ) : profileError ? (
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4">
+          <p className="font-semibold mb-2">Gagal memuat profil</p>
+          <p className="text-sm mb-3">{profileError}</p>
+          <button
+            type="button"
+            className="text-sm font-medium text-blue-600 hover:underline"
+            onClick={fetchProfile}
+          >
+            Coba lagi
+          </button>
+        </div>
+      ) : userData ? (
+        <ProfileCard
+          user={userData}
+          onEditProfile={handleEditProfile}
+          onEditPassword={handleEditPassword}
+        />
+      ) : (
+        <div className="bg-yellow-50 border border-yellow-200 text-yellow-800 rounded-lg p-4">
+          Data profil tidak tersedia.
+        </div>
+      )}
 
       {/* Activity Log Table */}
       <ActivityLogTable
-        data={pagedData}
+        data={activityLogs}
         perPage={perPage}
         currentPage={currentPage}
         totalPages={totalPages}
         totalData={totalData}
         onPageChange={handlePageChange}
         onPaginateChange={handlePaginateChange}
+        loading={activityLoading}
+        error={activityError}
       />
 
       {/* Edit Profile Modal */}
       <EditProfileModal
         isOpen={isEditProfileModalOpen}
-        onClose={() => setIsEditProfileModalOpen(false)}
-        user={userData}
+        onClose={closeProfileModal}
+        user={userData || {}}
         onSave={handleSaveProfile}
+        errors={profileFieldErrors}
+        isSaving={profileSaving}
+        onFieldChange={clearProfileFieldError}
       />
 
       {/* Edit Password Modal */}
       <EditPasswordModal
         isOpen={isEditPasswordModalOpen}
-        onClose={() => setIsEditPasswordModalOpen(false)}
+        onClose={closePasswordModal}
         onSave={handleSavePassword}
+        isSubmitting={passwordSaving}
+        errors={passwordFieldErrors}
+        onFieldChange={clearPasswordFieldError}
       />
     </div>
   );
