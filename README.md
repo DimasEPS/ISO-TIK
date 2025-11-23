@@ -5,7 +5,7 @@ Aplikasi web untuk pengelolaan audit dan kepatuhan TIK. Admin dapat mengelola do
 ## Fitur Utama
 
 - Manajemen dokumen audit: daftar dokumen, checklist, item audit, dan navigator per checklist.
-- Pertanyaan Excel & Aspek: input bukti objektif, kesesuaian, serta catatan editor dengan status terisi/beleum terisi.
+- Pertanyaan Excel & Aspek: input bukti objektif, kesesuaian, serta catatan editor dengan status terisi/belum terisi.
 - Review audit: reviewer memberi komentar, menandai status “sudah direview”, dan melihat riwayat komentar.
 - Modul SoA & Manual: pengelolaan kategori, dokumen, serta pertanyaan SoA.
 - NCR: pencatatan kasus, tindak lanjut, dan status.
@@ -15,49 +15,56 @@ Aplikasi web untuk pengelolaan audit dan kepatuhan TIK. Admin dapat mengelola do
 
 - React + Vite
 - Tailwind utility classes dan komponen UI kustom (Button, Dialog, Input, Select, Textarea)
-- Ikon: lucide-react
+- Pustaka ikon: lucide-react
 
-## Cara Menjalankan
+## Pengembangan Lokal (tanpa Docker)
 
-1. `npm install`
-2. `npm run dev`
-3. Buka URL yang ditampilkan (default Vite dev server).
+Prasyarat: Node.js 18+ dan npm.
 
-## Build
+1. Instal dependensi: `npm install`
+2. Jalankan server dev: `npm run dev`
+3. Buka URL yang ditampilkan (default `http://localhost:5173`)
+4. Build produksi lokal: `npm run build`
 
-- `npm run build` untuk produksi.
+## Menjalankan dengan Docker
 
-# React + Vite
+Prasyarat umum:
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+- Docker Engine dan Docker Compose v2 (Linux, macOS, atau Windows/Mac dengan Docker Desktop)
+- Port 5173 (mode builder/dev) dan 80 (mode produksi) tersedia
 
-Currently, two official plugins are available:
+### Mode Builder / Development
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+Mode ini menggunakan stage `development` pada Dockerfile. Container menjalankan Vite dev server dengan hot reload dan memetakan source code melalui volume.
 
-## React Compiler
+1. Masuk ke direktori frontend: `cd iso-tik-frontend`
+2. Bangun dan jalankan: `docker compose up --build react-dev`
+3. Akses aplikasi di `http://localhost:5173`
+4. Hentikan dengan `Ctrl+C` atau `docker compose down`
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+Catatan:
 
-## Expanding the ESLint configuration
+- Source code dimount ke container sehingga perubahan file langsung ter-reflect.
+- Jika port 5173 sudah terpakai, ganti mapping di `docker-compose.yml`.
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and [`typescript-eslint`](https://typescript-eslint.io) in your project.
+### Mode Production
 
-## Menjalankan di Arch Linux dengan Docker Compose
+Mode ini menggunakan stage `production` pada Dockerfile (Nginx yang menyajikan hasil build Vite).
 
-1. Instal Docker dan Compose plugin: `sudo pacman -Syu docker docker-compose`.
-2. Aktifkan daemon Docker: `sudo systemctl enable --now docker`.
-3. Opsional agar tidak perlu `sudo`: `sudo usermod -aG docker $USER`, lalu logout/login.
-4. Dari direktori proyek, bangun dan jalankan container: `docker compose up --build` (atau `docker compose up -d` untuk background).
-5. Setelah log Nginx muncul, akses aplikasi di `http://localhost/`.
-6. Hentikan layanan dengan `Ctrl+C` atau `docker compose down` jika memakai mode `-d`.
+1. `cd iso-tik-frontend`
+2. Jalankan: `docker compose up --build react-app`
+3. Setelah container siap, akses `http://localhost`
+4. Untuk background mode: `docker compose up -d react-app`
+5. Hentikan dengan `docker compose down` atau `docker compose stop react-app`
 
-## Menjalankan di Windows dengan Docker Compose
+Tips:
 
-1. Unduh dan instal [Docker Desktop](https://www.docker.com/products/docker-desktop/) lalu pastikan Compose v2 aktif.
-2. Jalankan Docker Desktop hingga status daemon “Running”.
-3. Buka PowerShell atau CMD pada direktori proyek ini.
-4. Eksekusi `docker compose up --build` (atau `docker compose up -d` untuk background).
-5. Setelah log Nginx muncul, akses aplikasi di `http://localhost/`.
-6. Hentikan container dengan `Ctrl+C` atau `docker compose down` (jika menjalankan mode `-d`).
+- Gunakan `docker compose build react-app` untuk rebuild image tanpa menjalankan container.
+- Sesuaikan mapping port `80:80` bila ingin host port lain.
+
+## Skrip Penting
+
+- `npm run dev` – menjalankan Vite dev server.
+- `npm run build` – membangun aset produksi ke folder `dist`.
+
+Dokumentasi ini berlaku lintas platform selama Docker/Node tersedia; langkah spesifik OS (instalasi Docker, izin user, dsb.) mengikuti panduan resmi masing-masing platform.

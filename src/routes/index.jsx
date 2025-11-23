@@ -124,6 +124,7 @@ const router = createBrowserRouter([
         path: "audit/dokumen/:id/review-excel/:checklistId",
         element: <ReviewPertanyaanExcel />,
       },
+      { path: "*", element: <Navigate to="/admin/dashboard" /> },
     ],
   },
   {
