@@ -85,7 +85,7 @@ export default function PertanyaanSoA() {
     <div className="space-y-6">
 
       <div className="flex flex-wrap items-center gap-4 ">
-        <InputGroup className="h-12 flex-1">
+        <InputGroup className="h-[56px] flex-1">
           <InputGroupInput
             placeholder="Cari pertanyaan berdasarkan nama"
             value={searchValue}
@@ -104,7 +104,7 @@ export default function PertanyaanSoA() {
           <DropdownMenuTrigger asChild>
             <Button
               variant="outline"
-              className="h-12 min-w-[160px] justify-between gap-2"
+              className="h-[56px] min-w-[160px] justify-between gap-2"
             >
               <span className="flex items-center gap-2">
                 <Funnel className="h-4 w-4" />
@@ -137,7 +137,7 @@ export default function PertanyaanSoA() {
         <OverlayForm
           variant="question"
           trigger={
-            <Button className="h-12 gap-2 bg-navy text-white hover:bg-navy-hover p-4">
+            <Button className="h-[56px] gap-2 bg-navy text-white hover:bg-navy-hover p-4">
               <Plus className="h-5 w-5" /> Tambah Pertanyaan
             </Button>
           }

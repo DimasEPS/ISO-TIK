@@ -12,3 +12,18 @@ services:
     restart: unless-stopped
     environment:
       - NODE_ENV=production
+
+  react-dev:
+    # Development build
+    build:
+      context: .
+      dockerfile: Dockerfile
+      target: development
+    ports:
+      - "5173:5173"
+    volumes:
+      - .:/app
+      - /app/node_modules
+    environment:
+      - NODE_ENV=development
+    restart: unless-stopped

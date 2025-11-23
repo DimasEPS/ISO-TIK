@@ -11,6 +11,7 @@ import {
   House,
   HouseIcon,
   LogOutIcon,
+  Menu,
   TriangleAlert,
 } from "lucide-react";
 import {
@@ -128,7 +129,7 @@ function SectionDivider() {
   return <hr className="border-navy my-2 mx-2" />;
 }
 
-export function AdminSidebarIconOnly() {
+export function AdminSidebarIconOnly({ onExpand }) {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const [hoveredItem, setHoveredItem] = useState(null);
@@ -171,6 +172,28 @@ export function AdminSidebarIconOnly() {
 
   return (
     <aside className="fixed left-0 top-0 h-screen w-20 bg-gray-light border-r border-navy flex flex-col items-center py-6 z-30">
+      {onExpand && (
+        <div className="mb-4">
+          <TooltipProvider delayDuration={0}>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <button
+                  type="button"
+                  onClick={onExpand}
+                  className="w-12 h-12 flex items-center justify-center rounded-lg text-navy transition-colors hover:bg-navy hover:text-gray-dark"
+                  aria-label="Tampilkan sidebar penuh"
+                >
+                  <Menu className="h-5 w-5" />
+                </button>
+              </TooltipTrigger>
+              <TooltipContent side="right" className="bg-navy text-white">
+                <p>Tampilkan menu penuh</p>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+        </div>
+      )}
+
       {/* Main Menu */}
       <nav className="flex flex-col items-center gap-2 flex-1">
         <div className="mb-2">

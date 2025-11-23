@@ -64,8 +64,8 @@ export default function KategoriSoA() {
 
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-4 rounded-2xl p-4">
-        <InputGroup className="h-12 flex-1">
+      <div className="flex flex-wrap items-center gap-4 rounded-[4px] p-4">
+        <InputGroup className="h-[56px] flex-1 w-[1355px]">
           <InputGroupInput
             placeholder="Cari kategori berdasarkan nama"
             value={searchValue}
@@ -84,7 +84,7 @@ export default function KategoriSoA() {
         <OverlayForm
           variant="category"
           trigger={
-            <Button className="h-12 gap-2 bg-navy text-white hover:bg-navy-hover w-[191px] p-[16px]">
+            <Button className="h-[56px] gap-2 bg-navy text-white hover:bg-navy-hover w-[191px] p-[16px]">
               <Plus className="h-5 w-5" /> Tambah Kategori
             </Button>
           }

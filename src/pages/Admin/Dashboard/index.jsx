@@ -15,7 +15,7 @@ export default function Dashboard(){
         }, [])
     return(
         <div>
-            halo
+
         </div>
     )
 }

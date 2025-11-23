@@ -29,7 +29,7 @@ const NAVIGATION_ITEMS = [
     icon: UserIcon,
     hoverIcon: UserIcon,
     iconClassName: "!h-6 !w-6 text-gray-dark",
-    hoverIconClassName: "!h-6 !w-6 text-navy",
+    hoverIconClassName: "!h-6 !w-6 text-gray-dark",
   },
 ];
 
@@ -41,7 +41,7 @@ const SECTION_DIVIDERS = {
 const ICON_CLASSES = {
   base: "h-5 w-5 text-gray-dark transition-all duration-200",
   active: "h-5 w-5 text-gray-light transition-all duration-200",
-  hover: "h-5 w-5 text-navy transition-all duration-200",
+  hover: "h-5 w-5 text-gray-dark transition-all duration-200",
 };
 
 const BUTTON_CLASSES = {
@@ -110,7 +110,7 @@ function SidebarNavItem({ item, isActive, isHovered, onClick, onMouseEnter, onMo
         onClick={onClick}
         onMouseEnter={onMouseEnter}
         onMouseLeave={onMouseLeave}
-        className={`flex items-center gap-3 px-4 py-3 ${getButtonClasses(isActive)}`}
+        className={`flex items-center gap-3 px-4 py-3 h-[52px] ${getButtonClasses(isActive)}`}
       >
         <IconComponent
           className={getIconClasses(
