@@ -27,7 +27,7 @@ const STATUS_STYLES = {
   Approved: "bg-green-light text-green border border-[#BDECCB] shadow-sm small",
 }
 
-const buildSoAColumns = ({ onPreview, onDownload, downloadingId, onDelete }) => [
+const buildSoAColumns = ({ onPreview, onDownload, downloadingId, onDelete, onEdit, isUpdating }) => [
   {
     key: "noDoc",
     header: "No Dokumen",
@@ -110,6 +110,8 @@ const buildSoAColumns = ({ onPreview, onDownload, downloadingId, onDelete }) => 
               <FilePen className="text-[#2B7FFF] w-5 h-5 cursor-pointer" />
             </button>
           )}
+          onEditSubmit={onEdit}
+          editSubmitting={isUpdating}
         />
         <button type="button" onClick={() => onPreview?.(row)} title="Pratinjau PDF" aria-label="Pratinjau PDF Dokumen">
           <FileText className="text-[#00C950] w-5 h-5 cursor-pointer" />
@@ -170,6 +172,8 @@ export default function DokumenSoA() {
     error,
     createDocument,
     isCreating,
+    updateDocument,
+    isUpdating,
     deleteDocument,
     isDeleting,
   } = useSoADocuments()
@@ -217,6 +221,19 @@ export default function DokumenSoA() {
     return getSoAReviewPDFPreview(previewDoc)
   }, [previewDoc])
 
+  const handleEditDocument = useCallback(
+    async (documentId, payload) => {
+      if (!documentId) return
+      try {
+        await updateDocument(documentId, payload)
+      } catch (updateError) {
+        console.error("Gagal memperbarui dokumen SoA", updateError)
+        throw updateError
+      }
+    },
+    [updateDocument],
+  )
+
   const columns = useMemo(
     () =>
       buildSoAColumns({
@@ -224,8 +241,10 @@ export default function DokumenSoA() {
         onDownload: handleDownload,
         downloadingId: downloadingDocId,
         onDelete: setDeleteDoc,
+        onEdit: handleEditDocument,
+        isUpdating,
       }),
-    [handlePreview, handleDownload, downloadingDocId, setDeleteDoc],
+    [handlePreview, handleDownload, downloadingDocId, setDeleteDoc, handleEditDocument, isUpdating],
   )
 
   const handleCreateDocument = useCallback(
@@ -241,10 +260,10 @@ export default function DokumenSoA() {
   )
 
   const handleDeleteDocument = useCallback(
-    async (doc) => {
-      if (!doc?.id) return
+    async (documentId) => {
+      if (!documentId) return
       try {
-        await deleteDocument(doc.id)
+        await deleteDocument(documentId)
         setDeleteDoc(null)
       } catch (deleteError) {
         console.error("Gagal menghapus dokumen SoA", deleteError)
@@ -337,7 +356,11 @@ export default function DokumenSoA() {
           if (!open) setDeleteDoc(null)
         }}
         documentData={deleteDoc}
-        onConfirm={(doc) => doc && handleDeleteDocument(doc)}
+        onConfirm={(payload) => {
+          const documentId =
+            typeof payload === "string" ? payload : payload?.id
+          if (documentId) handleDeleteDocument(documentId)
+        }}
       />
 
     </div>

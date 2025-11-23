@@ -18,6 +18,16 @@ export const soaDocumentsService = {
       params,
     }),
 
+  getDocument: (documentId, params = {}) =>
+    apiClient(`/soa-documents/${documentId}`, {
+      params,
+    }),
+
+  getDocumentDetail: (documentId, params = {}) =>
+    apiClient(`/soa-documents/${documentId}/detail`, {
+      params,
+    }),
+
   createDocument: (payload) =>
     apiClient("/admin/soa-documents", {
       method: "POST",

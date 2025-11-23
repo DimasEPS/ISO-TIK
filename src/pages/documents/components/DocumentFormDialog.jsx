@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 import { CalendarIcon, UploadIcon } from "lucide-react"
 import {
   Dialog,
@@ -16,10 +16,19 @@ const defaultForm = {
   tanggalTerbit: "",
   deskripsi: "",
   fileName: "",
+  file: null,
 }
 
-export function DocumentFormDialog({ mode = "add", open, onOpenChange, initialData }) {
+export function DocumentFormDialog({
+  mode = "add",
+  open,
+  onOpenChange,
+  initialData,
+  onSubmit,
+  isSubmitting = false,
+}) {
   const [formData, setFormData] = useState(defaultForm)
+  const fileInputRef = useRef(null)
 
   useEffect(() => {
     if (mode === "edit" && initialData) {
@@ -29,9 +38,16 @@ export function DocumentFormDialog({ mode = "add", open, onOpenChange, initialDa
         tanggalTerbit: initialData.tanggalTerbit || "",
         deskripsi: initialData.deskripsi || "",
         fileName: initialData.fileName || `${initialData.noDoc || "dokumen"}.pdf`,
+        file: null,
       })
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
     } else if (!open) {
-      setFormData(defaultForm)
+      setFormData({ ...defaultForm })
+      if (fileInputRef.current) {
+        fileInputRef.current.value = ""
+      }
     }
   }, [mode, initialData, open])
 
@@ -48,12 +64,67 @@ export function DocumentFormDialog({ mode = "add", open, onOpenChange, initialDa
     setFormData((prev) => ({ ...prev, [field]: event.target.value }))
   }
 
-  const handleSubmit = (event) => {
+  const handleFileButtonClick = () => {
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = (event) => {
+    const [file] = event.target.files || []
+    if (!file) return
+
+    setFormData((prev) => ({
+      ...prev,
+      file,
+      fileName: file.name,
+    }))
+  }
+
+  const handleSubmit = async (event) => {
     event.preventDefault()
-    onOpenChange?.(false)
+
+    const payload = {
+      id: initialData?.id,
+      noDoc: formData.noDoc?.trim() || "",
+      judul: formData.judul?.trim() || "",
+      tanggalTerbit: formData.tanggalTerbit?.trim() || "",
+      deskripsi: formData.deskripsi?.trim() || "",
+      file: formData.file,
+    }
+
+    if (!payload.noDoc) {
+      window.alert("Kode dokumen wajib diisi.")
+      return
+    }
+
+    if (!payload.judul) {
+      window.alert("Nama dokumen wajib diisi.")
+      return
+    }
+
+    if (mode === "add" && !payload.file) {
+      window.alert("File dokumen wajib diunggah.")
+      return
+    }
+
+    if (!onSubmit) {
+      onOpenChange?.(false)
+      return
+    }
+
+    try {
+      await onSubmit(payload)
+      onOpenChange?.(false)
+    } catch (error) {
+      console.error("Gagal menyimpan dokumen", error)
+      window.alert(error?.message || "Gagal menyimpan dokumen.")
+    }
   }
 
   const handleCancel = () => {
+    setFormData({ ...defaultForm })
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ""
+    }
     onOpenChange?.(false)
   }
 
@@ -66,6 +137,13 @@ export function DocumentFormDialog({ mode = "add", open, onOpenChange, initialDa
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept=".pdf,.doc,.docx,.png,.jpg,.jpeg"
+            className="hidden"
+            onChange={handleFileChange}
+          />
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
             <div className="space-y-2">
               <p className="small text-gray-dark">Kode Dokumen</p>
@@ -107,7 +185,7 @@ export function DocumentFormDialog({ mode = "add", open, onOpenChange, initialDa
           <div className="space-y-2">
             <p className="small text-gray-dark">Deskripsi</p>
             <textarea
-              className="min-h-[96px] w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3 text-sm text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB2FF]"
+              className="min-h-24 w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-4 py-3 text-sm text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB2FF]"
               placeholder="Masukkan Deskripsi Dokumen"
               value={formData.deskripsi}
               onChange={handleInputChange("deskripsi")}
@@ -122,16 +200,32 @@ export function DocumentFormDialog({ mode = "add", open, onOpenChange, initialDa
                 {formData.fileName}
               </p>
             )}
-            <Button type="button" className="w-full bg-[#1F3EFF] hover:bg-[#152ab8]" variant="default">
+            <Button
+              type="button"
+              className="w-full bg-[#1F3EFF] hover:bg-[#152ab8]"
+              variant="default"
+              onClick={handleFileButtonClick}
+              disabled={isSubmitting}
+            >
               <UploadIcon className="mr-2 h-4 w-4" /> {fileButtonLabel}
             </Button>
           </div>
 
           <DialogFooter className="gap-2">
-            <Button type="button" variant="outline" className="w-full sm:w-auto" onClick={handleCancel}>
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full sm:w-auto"
+              onClick={handleCancel}
+              disabled={isSubmitting}
+            >
               Batal
             </Button>
-            <Button type="submit" className="w-full sm:w-auto bg-navy hover:bg-navy-hover text-white">
+            <Button
+              type="submit"
+              className="w-full sm:w-auto bg-navy hover:bg-navy-hover text-white"
+              disabled={isSubmitting}
+            >
               {primaryButtonLabel}
             </Button>
           </DialogFooter>

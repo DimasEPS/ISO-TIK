@@ -17,20 +17,44 @@ const API_STATUS_TO_DISPLAY = {
   approved: "Approved",
 }
 
-const mapDocumentRow = (item) => ({
-  id: item.id ?? item.document_number,
-  noDoc: item.document_number,
-  judul: item.title,
-  tanggalTerbit: item.publish_date,
-  tanggalDibuat: item.created_at ?? "-",
-  penyusun: item.compiler_name ?? "-",
-  ketuaIso: item.iso_chairman_name ?? "-",
-  direktur: item.director_name ?? "-",
-  revisi: item.revision ?? "-",
-  klasifikasi: item.classification ?? "-",
-  statusRaw: item.status,
-  status: API_STATUS_TO_DISPLAY[item.status] ?? item.status ?? "-",
-})
+const mapDocumentRow = (item) => {
+  const publishDateIso = item.publish_date ?? ""
+  const publishDateInput = publishDateIso ? publishDateIso.split("T")[0] : ""
+  const createdAtIso = item.created_at ?? ""
+  const revisionValue = item.revision ?? ""
+  const classificationValue = item.classification ?? ""
+  const compilerName = item.compiler_name ?? ""
+  const isoChairmanName = item.iso_chairman_name ?? ""
+  const directorName = item.director_name ?? ""
+  const statusValue = item.status
+
+  return {
+    id: item.id ?? item.document_number,
+    noDoc: item.document_number,
+    judul: item.title,
+    tanggalTerbit: publishDateIso || "-",
+    tanggalTerbitInput: publishDateInput,
+    tanggalDibuat: createdAtIso || "-",
+    penyusun: compilerName || "-",
+    ketuaIso: isoChairmanName || "-",
+    direktur: directorName || "-",
+    revisi: revisionValue || "-",
+    klasifikasi: classificationValue || "-",
+    statusRaw: statusValue,
+    status: API_STATUS_TO_DISPLAY[statusValue] ?? statusValue ?? "-",
+    editable: {
+      document_number: item.document_number ?? "",
+      publish_date: publishDateInput,
+      title: item.title ?? "",
+      revision: revisionValue,
+      classification: classificationValue,
+      compiler_name: compilerName,
+      iso_chairman_name: isoChairmanName,
+      director_name: directorName,
+      status: statusValue ?? "draft",
+    },
+  }
+}
 
 export function useSoADocuments() {
   const [statusFilter, setStatusFilterState] = useState("Semua Status")
@@ -88,6 +112,14 @@ export function useSoADocuments() {
     },
   })
 
+  const updateMutation = useMutation({
+    mutationFn: ({ documentId, payload }) =>
+      soaDocumentsService.updateDocument(documentId, payload),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["soa-documents"] })
+    },
+  })
+
   const deleteMutation = useMutation({
     mutationFn: (documentId) => soaDocumentsService.deleteDocument(documentId),
     onSuccess: () => {
@@ -114,6 +146,9 @@ export function useSoADocuments() {
     error: listQuery.error,
     createDocument: (payload) => createMutation.mutateAsync(payload),
     isCreating: createMutation.isPending,
+    updateDocument: (documentId, payload) =>
+      updateMutation.mutateAsync({ documentId, payload }),
+    isUpdating: updateMutation.isPending,
     deleteDocument: (documentId) => deleteMutation.mutateAsync(documentId),
     isDeleting: deleteMutation.isPending,
   }

@@ -1,4 +1,4 @@
-import { useRef } from "react";
+import { useEffect, useRef, useState } from "react"
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -20,49 +20,59 @@ export function StatusDropdown({
   classNameDropdown = "",
   showFunnelIcon = true,
 }) {
-  const triggerRef = useRef(null);
+  const triggerRef = useRef(null)
+  const [menuWidth, setMenuWidth] = useState()
+
+  useEffect(() => {
+    const updateWidth = () => {
+      if (!triggerRef.current) return
+      setMenuWidth(triggerRef.current.offsetWidth)
+    }
+
+    updateWidth()
+    window.addEventListener("resize", updateWidth)
+    return () => window.removeEventListener("resize", updateWidth)
+  }, [])
+
   const selectedOption = options.find((option) => option.value === value)
   return (
     <div className={className}>
       <DropdownMenu open={isMenuOpen} onOpenChange={setIsMenuOpen}>
         <DropdownMenuTrigger asChild>
-          <div ref={triggerRef} className="w-full">
-            <Button
-              variant="outline"
-              className={`flex h-12 w-full cursor-pointer items-center justify-between gap-2 bg-state px-4 text-sm font-medium text-navy ${classNameButton} ${
-                isMenuOpen ? "border-navy shadow" : "bg-state text-navy"
-              }`}
-            >
-              <span className="flex items-center gap-2 truncate">
-                {showFunnelIcon && <Funnel className="size-4" />}
-                <span className="truncate">
-                  {selectedOption?.label && value !== "Semua Kategori"
-                    ? `${selectedOption.value} - ${selectedOption.label}`
-                    : value}
-                </span>
+          <Button
+            ref={triggerRef}
+            variant="outline"
+            className={`flex h-12 w-full cursor-pointer items-center justify-between gap-2 bg-state px-4 text-sm font-medium text-navy ${classNameButton} ${
+              isMenuOpen ? "border-navy shadow" : "bg-state text-navy"
+            }`}
+          >
+            <span className="flex items-center gap-2 truncate">
+              {showFunnelIcon && <Funnel className="size-4" />}
+              <span className="truncate">
+                {selectedOption?.label && value !== "Semua Kategori"
+                  ? `${selectedOption.label}`
+                  : value}
               </span>
-              <ChevronDown
-                className={`size-4 ${
-                  isMenuOpen ? "rotate-180" : ""
-                } transition-transform duration-200 ease-in-out`}
-              />
-            </Button>
-          </div>
+            </span>
+            <ChevronDown
+              className={`size-4 ${
+                isMenuOpen ? "rotate-180" : ""
+              } transition-transform duration-200 ease-in-out`}
+            />
+          </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent
           className={`${classNameDropdown}`}
+          style={menuWidth ? { width: menuWidth } : undefined}
           side="bottom"
           align="start"
-          style={{
-            width: triggerRef.current?.offsetWidth || undefined,
-          }}
         >
           <DropdownMenuRadioGroup value={value} onValueChange={onChange}>
             {options.map((option) => (
               <DropdownMenuRadioItem
                 key={option.value}
                 value={option.value}
-                className="body text-navy bg-gray-light focus:bg-gray-dark2"
+                className="body text-navy bg-gray-light focus:bg-gray-dark2 w-full"
               >
                 {option.label && option.value !== "Semua Kategori"
                   ? `${option.label}`

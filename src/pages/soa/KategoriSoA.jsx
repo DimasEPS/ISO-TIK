@@ -1,30 +1,16 @@
-import { useMemo, useState } from "react"
+import { useCallback, useState } from "react"
 import { NavLink } from "react-router-dom"
-import { SearchIcon, Plus, ChevronDown, FilePen, Trash2 } from "lucide-react"
+import { SearchIcon, Plus, FilePen, Trash2 } from "lucide-react"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Button } from "@/components/ui/button"
 import { ChecklistCard } from "@/components/admin/audit/ChecklistCard"
-import { usePageTemplate } from "@/hooks/usePageTemplate";
-import { reviewNavigatorConfig } from "@/mocks/reviewSoAData"
+import { usePageTemplate } from "@/hooks/usePageTemplate"
 import { PaginateControls } from "@/components/admin/table"
 import { OverlayForm } from "@/components/admin/soa/OverlayForm"
+import { DocumentDeleteDialog } from "@/pages/documents/components/DocumentDeleteDialog"
+import { useSoACategories } from "./hooks/useSoACategories"
 
 const PAGINATE_OPTIONS = [10, 20, 50]
-
-function buildItems() {
-  const fallbackDescription =
-    "Has management defined and approved a set of policies for information security?"
-  return reviewNavigatorConfig.flatMap((section, sectionIndex) =>
-    section.questions.map((question, index) => ({
-      id: question.id ?? `${section.code}-${index + 1}`,
-      code: question.id ?? `${section.code}.${index + 1}`,
-      title: question.label,
-      description: question.description ?? fallbackDescription,
-      sectionCode: section.code,
-      sectionLabel: section.label ?? section.title ?? `Kategori ${sectionIndex + 1}`,
-    })),
-  )
-}
 
 export default function KategoriSoA() {
   usePageTemplate({
@@ -35,40 +21,68 @@ export default function KategoriSoA() {
       role: "Administrator",
       urlDetail: "/admin/profil",
     },
-  });
-  const allItems = useMemo(() => buildItems(), [])
-  const [searchValue, setSearchValue] = useState("")
-  const [selectedCategory, setSelectedCategory] = useState("all")
-  const [perPage, setPerPage] = useState(10)
-  const [activePage, setActivePage] = useState(1)
+  })
 
-  const filteredItems = useMemo(() => {
-    return allItems.filter((item) => {
-      const matchesSearch = item.title.toLowerCase().includes(searchValue.toLowerCase())
-      const matchesCategory =
-        selectedCategory === "all" || item.sectionCode === selectedCategory
-      return matchesSearch && matchesCategory
-    })
-  }, [allItems, searchValue, selectedCategory])
+  const [categoryToDelete, setCategoryToDelete] = useState(null)
 
-  const totalPages = Math.max(1, Math.ceil(filteredItems.length / perPage))
-  const pagedItems = useMemo(() => {
-    const startIndex = (activePage - 1) * perPage
-    return filteredItems.slice(startIndex, startIndex + perPage)
-  }, [filteredItems, activePage, perPage])
+  const {
+    searchValue,
+    setSearchValue,
+    perPage,
+    activePage,
+    setActivePage,
+    pagedData,
+    totalPages,
+    totalData,
+    handlePaginateChange,
+    isLoading,
+    isError,
+    error,
+    createCategory,
+    isCreatingCategory,
+    updateCategory,
+    isUpdatingCategory,
+    deleteCategory,
+  } = useSoACategories()
 
-  const handlePaginateChange = (value) => {
-    setPerPage(Number(value))
-    setActivePage(1)
-  }
+  const handleSearchChange = useCallback(
+    (event) => {
+      setSearchValue(event.target.value)
+    },
+    [setSearchValue],
+  )
 
-  const categoryOptions = [
-    { label: "Semua Kategori", value: "all" },
-    ...reviewNavigatorConfig.map((section) => ({
-      label: `${section.code} - ${section.label ?? section.title ?? "Kategori"}`,
-      value: section.code,
-    })),
-  ]
+  const handleSubmitCategory = useCallback(
+    async (payload, categoryId) => {
+      try {
+        if (categoryId) {
+          await updateCategory(categoryId, payload)
+        } else {
+          await createCategory(payload)
+        }
+      } catch (submitError) {
+        console.error("Gagal menyimpan kategori SoA", submitError)
+        alert(submitError?.message ?? "Gagal menyimpan kategori SoA")
+      }
+    },
+    [createCategory, updateCategory],
+  )
+
+  const handleDeleteCategory = useCallback(
+    async (categoryPayload) => {
+      const categoryId =
+        typeof categoryPayload === "string" ? categoryPayload : categoryPayload?.id
+      if (!categoryId) return
+      try {
+        await deleteCategory(categoryId)
+        setCategoryToDelete(null)
+      } catch (deleteError) {
+        console.error("Gagal menghapus kategori SoA", deleteError)
+        alert(deleteError?.message ?? "Gagal menghapus kategori SoA")
+      }
+    },
+    [deleteCategory],
+  )
 
   return (
     <div className="space-y-6">
@@ -77,10 +91,7 @@ export default function KategoriSoA() {
           <InputGroupInput
             placeholder="Cari kategori berdasarkan nama"
             value={searchValue}
-            onChange={(event) => {
-              setSearchValue(event.target.value)
-              setActivePage(1)
-            }}
+            onChange={handleSearchChange}
             className="bg-state text-navy placeholder:text-gray-dark"
           />
           <InputGroupAddon>
@@ -88,66 +99,87 @@ export default function KategoriSoA() {
           </InputGroupAddon>
         </InputGroup>
 
-        
         <OverlayForm
           variant="category"
+          onCategorySubmit={handleSubmitCategory}
+          categorySubmitting={isCreatingCategory}
           trigger={
             <Button className="h-[56px] gap-2 bg-navy text-white hover:bg-navy-hover w-[191px] p-[16px]">
               <Plus className="h-5 w-5" /> Tambah Kategori
             </Button>
           }
-          categoryOptions={categoryOptions}
+          categoryOptions={[]}
         />
       </div>
 
-      <div className="space-y-4">
-        {pagedItems.map((item) => (
-          <ChecklistCard
-            key={item.id}
-            badge={item.code}
-            title={item.title}
-            description={item.description}
-           
-            actions={
-              <div className="flex items-center gap-2">
-                <OverlayForm
-                  variant="category"
-                  mode="edit"
-                  defaultValues={{
-                    category: `${item.sectionCode} - ${item.sectionLabel}`,
-                    code: item.code,
-                    name: item.title,
-                    question: item.description,
-                  }}
-                  categoryOptions={categoryOptions}
-                  trigger={
-                    <button
-                      type="button"
-                      className="rounded p-2 transition-colors hover:bg-blue-50"
-                      title="Edit"
-                    >
-                      <FilePen className="h-5 w-5 text-[#2B7FFF]" />
-                    </button>
-                  }
-                />
-                <button
-                  type="button"
-                  className="rounded p-2 transition-colors hover:bg-red-50"
-                  title="Hapus"
-                  onClick={() => console.log("Hapus", item)}
-                >
-                  <Trash2 className="h-5 w-5 text-red-500" />
-                </button>
-              </div>
-            }
-          />
-        ))}
-        {pagedItems.length === 0 && (
-          <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
-            Tidak ada kategori sesuai pencarian
-          </div>
-        )}
-      </div>
+      {isError && (
+        <div className="rounded-2xl border border-red-200 bg-red-50 p-4 text-sm text-red">
+          {error?.message || "Gagal memuat kategori SoA"}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="rounded-2xl border border-gray-200 bg-white p-8 text-center text-gray-500">
+          Memuat data kategori SoA...
+        </div>
+      ) : (
+        <div className="space-y-4">
+          {pagedData.map((item) => (
+            <ChecklistCard
+              key={item.id}
+              badge={item.code}
+              title={item.name}
+              description={item.description || "-"}
+              meta={
+                <span className="inline-flex items-center bg-state px-3 py-1 small rounded-[4px] text-navy">
+                  Kode: {item.code || "-"}
+                </span>
+              }
+              actions={
+                <div className="flex items-center gap-2">
+                  <OverlayForm
+                    variant="category"
+                    mode="edit"
+                    defaultValues={{
+                      id: item.id,
+                      code: item.code,
+                      name: item.name,
+                      description: item.description,
+                    }}
+                    onCategorySubmit={handleSubmitCategory}
+                    categorySubmitting={isUpdatingCategory}
+                    trigger={
+                      <button
+                        type="button"
+                        className="rounded p-2 transition-colors hover:bg-blue-50"
+                        title="Edit"
+                      >
+                        <FilePen className="h-5 w-5 text-[#2B7FFF]" />
+                      </button>
+                    }
+                    categoryOptions={[]}
+                  />
+                  <button
+                    type="button"
+                    className="rounded p-2 transition-colors hover:bg-red-50"
+                    title="Hapus"
+                    onClick={() =>
+                      setCategoryToDelete({ ...item, judul: item.name ?? "Kategori" })
+                    }
+                  >
+                    <Trash2 className="h-5 w-5 text-red-500" />
+                  </button>
+                </div>
+              }
+            />
+          ))}
+          {pagedData.length === 0 && (
+            <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
+              Tidak ada kategori sesuai pencarian
+            </div>
+          )}
+        </div>
+      )}
 
       <PaginateControls
         perPage={perPage}
@@ -157,7 +189,17 @@ export default function KategoriSoA() {
         activePage={activePage}
         onPageChange={setActivePage}
         totalPages={totalPages}
-        totalData={filteredItems.length}
+        totalData={totalData}
+      />
+
+      <DocumentDeleteDialog
+        open={Boolean(categoryToDelete)}
+        onOpenChange={(open) => {
+          if (!open) setCategoryToDelete(null)
+        }}
+        documentData={categoryToDelete}
+        entityLabel="Kategori"
+        onConfirm={(payload) => payload && handleDeleteCategory(payload)}
       />
     </div>
   )

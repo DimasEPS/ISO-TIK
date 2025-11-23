@@ -1,12 +1,13 @@
-import { useMemo, useState } from "react"
+import { useCallback, useMemo, useState } from "react"
 import { Eye, FileDown, Trash2, FilePen } from "lucide-react"
 import { usePageTemplate } from "@/hooks/usePageTemplate";
 import { SearchBar, PaginateControls, Table as AdminTable } from "@/components/admin/table"
 import { Button } from "@/components/ui/button"
-import { useDocuments } from "./hooks/useDocuments"
+import { useDocuments, mapDocumentDetail } from "./hooks/useDocuments"
 import { DocumentFormDialog } from "./components/DocumentFormDialog"
 import { DocumentDeleteDialog } from "./components/DocumentDeleteDialog"
 import { DetailModal } from "@/pages/ncr/components/common"
+import { downloadDocumentFile } from "@/lib/download-file"
 
 export default function Dokumen() {
   const {
@@ -19,6 +20,12 @@ export default function Dokumen() {
     totalData,
     totalPages,
     handlePaginateChange,
+    createDocument,
+    isCreatingDocument,
+    updateDocument,
+    isUpdatingDocument,
+    deleteDocument,
+    fetchDocumentDetail,
   } = useDocuments()
   usePageTemplate({
     title: "Statement of Applicability",
@@ -30,9 +37,120 @@ export default function Dokumen() {
     },
   });
   const [isAddDialogOpen, setIsAddDialogOpen] = useState(false)
+  const [isEditDialogOpen, setIsEditDialogOpen] = useState(false)
   const [editDoc, setEditDoc] = useState(null)
   const [previewDoc, setPreviewDoc] = useState(null)
   const [deleteDoc, setDeleteDoc] = useState(null)
+
+  const handleCreateDocument = useCallback(
+    async (values) => {
+      await createDocument({
+        document_code: values.noDoc,
+        document_name: values.judul,
+        description: values.deskripsi,
+        file: values.file,
+      })
+      setActivePage(1)
+    },
+    [createDocument, setActivePage],
+  )
+
+  const handleUpdateDocument = useCallback(
+    async (values) => {
+      const targetId = values.id || editDoc?.id
+      if (!targetId) {
+        throw new Error("Dokumen tidak valid")
+      }
+
+      await updateDocument(targetId, {
+        document_code: values.noDoc,
+        document_name: values.judul,
+        description: values.deskripsi,
+        file: values.file,
+      })
+    },
+    [editDoc?.id, updateDocument],
+  )
+
+  const handlePreviewDocument = useCallback(
+    async (document) => {
+      if (!document?.id) return
+
+      setPreviewDoc({
+        ...document,
+        penyusun: document.penyusun || "-",
+        fileName: document.fileName || "",
+      })
+
+      try {
+        const response = await fetchDocumentDetail(document.id)
+        const detail = mapDocumentDetail(response?.data ?? {})
+        setPreviewDoc(detail)
+      } catch (error) {
+        console.error("Gagal memuat detail dokumen", error)
+        window.alert(error?.message || "Gagal memuat detail dokumen.")
+      }
+    },
+    [fetchDocumentDetail],
+  )
+
+  const handleDownloadDocument = useCallback(
+    async (document) => {
+      if (!document?.id) return
+
+      let detail
+      try {
+        const response = await fetchDocumentDetail(document.id)
+        detail = mapDocumentDetail(response?.data ?? {})
+        await downloadDocumentFile({
+          fileUrl: detail.fileUrl,
+          fileName: detail.fileName || detail.noDoc || "dokumen",
+        })
+      } catch (error) {
+        console.error("Gagal mengunduh dokumen", error)
+        window.alert(error?.message || "Gagal mengunduh dokumen.")
+      }
+    },
+    [fetchDocumentDetail],
+  )
+
+  const handleEditDocument = useCallback(
+    async (document) => {
+      if (!document?.id) return
+
+      setEditDoc(document)
+      setIsEditDialogOpen(true)
+
+      try {
+        const response = await fetchDocumentDetail(document.id)
+        const detail = mapDocumentDetail(response?.data ?? {})
+        setEditDoc(detail)
+      } catch (error) {
+        console.error("Gagal memuat detail dokumen", error)
+        window.alert(error?.message || "Gagal memuat detail dokumen.")
+      }
+    },
+    [fetchDocumentDetail],
+  )
+
+  const handleDeleteDocument = useCallback(
+    async (document) => {
+      if (!document?.id) return
+
+      try {
+        await deleteDocument(document.id)
+        setDeleteDoc(null)
+      } catch (error) {
+        console.error("Gagal menghapus dokumen", error)
+        window.alert(error?.message || "Gagal menghapus dokumen.")
+      }
+    },
+    [deleteDocument],
+  )
+
+  const handleClosePreview = useCallback(() => {
+    setPreviewDoc(null)
+  }, [])
 
   const columns = useMemo(
     () => [
@@ -75,18 +193,23 @@ export default function Dokumen() {
               type="button"
               title="Lihat"
               className="text-[#121A2E] hover:text-blue-dark"
-              onClick={() => setPreviewDoc(row)}
+              onClick={() => handlePreviewDocument(row)}
             >
               <Eye className="h-5 w-5" />
             </button>
-            <button type="button" title="Unduh" className="text-[#F1C441] hover:text-yellow-500">
+            <button
+              type="button"
+              title="Unduh"
+              className="text-[#F1C441] hover:text-yellow-500"
+              onClick={() => handleDownloadDocument(row)}
+            >
               <FileDown className="h-5 w-5" />
             </button>
             <button
               type="button"
               title="Edit"
               className="text-[#2B7FFF] hover:text-blue-dark"
-              onClick={() => setEditDoc(row)}
+              onClick={() => handleEditDocument(row)}
             >
               <FilePen className="h-5 w-5" />
             </button>
@@ -102,7 +225,7 @@ export default function Dokumen() {
         ),
       },
     ],
-    [],
+    [handleDownloadDocument, handleEditDocument, handlePreviewDocument],
   )
 
   return (
@@ -128,7 +251,7 @@ export default function Dokumen() {
         tableClassName="min-w-[900px]"
         columns={columns}
         data={pagedData}
-        getRowKey={(row) => row.noDoc}
+        getRowKey={(row) => row.id ?? row.noDoc}
       />
 
       <PaginateControls
@@ -145,18 +268,23 @@ export default function Dokumen() {
         mode="add"
         open={isAddDialogOpen}
         onOpenChange={setIsAddDialogOpen}
+        onSubmit={handleCreateDocument}
+        isSubmitting={isCreatingDocument}
       />
       <DocumentFormDialog
         mode="edit"
-        open={Boolean(editDoc)}
+        open={isEditDialogOpen}
         onOpenChange={(open) => {
+          setIsEditDialogOpen(open)
           if (!open) setEditDoc(null)
         }}
         initialData={editDoc}
+        onSubmit={handleUpdateDocument}
+        isSubmitting={isUpdatingDocument}
       />
       <DetailModal
         isOpen={Boolean(previewDoc)}
-        onClose={() => setPreviewDoc(null)}
+        onClose={handleClosePreview}
         title="Detail Dokumen SoA"
         subtitle="Informasi lengkap mengenai dokumen yang dipilih"
         fields={
@@ -185,6 +313,10 @@ export default function Dokumen() {
                   value: previewDoc.deskripsi || "-",
                   type: "description",
                 },
+                {
+                  label: "File",
+                  value: previewDoc.fileName || previewDoc.noDoc || "-",
+                },
               ]
             : []
         }
@@ -195,7 +327,9 @@ export default function Dokumen() {
           if (!open) setDeleteDoc(null)
         }}
         documentData={deleteDoc}
-        onConfirm={() => setDeleteDoc(null)}
+        onConfirm={(document) => handleDeleteDocument(document)}
+        caseSensitive={false}
+        entityLabel="Dokumen"
       />
     </div>
   )
