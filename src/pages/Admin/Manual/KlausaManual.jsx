@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { SearchBar, PaginateControls } from "@/components/admin/table";
 import { ManualClauseFormDialog, ManualClauseDeleteDialog } from "@/components/admin/Manual";
@@ -8,6 +9,7 @@ import { Eye, FilePen, Plus, Trash2 } from "lucide-react";
 const PER_PAGE_OPTIONS = [10, 20, 50];
 
 export default function KlausaManual() {
+  const navigate = useNavigate();
   const [clauses, setClauses] = useState(manualClauses);
   const [search, setSearch] = useState("");
   const [perPage, setPerPage] = useState(10);
@@ -91,7 +93,10 @@ export default function KlausaManual() {
 
               <div className="flex items-center gap-3">
                 <button type="button" title="Lihat">
-                  <Eye className="h-5 w-5 text-navy" />
+                  <Eye
+                    className="h-5 w-5 text-navy hover:cursor-pointer"
+                    onClick={() => navigate(`/admin/manual/klausa/${clause.id}/sub`)}
+                  />
                 </button>
                 <button
                   type="button"
@@ -102,7 +107,7 @@ export default function KlausaManual() {
                     setIsFormOpen(true);
                   }}
                 >
-                  <FilePen className="h-5 w-5 text-blue" />
+                  <FilePen className="h-5 w-5 text-blue hover:cursor-pointer" />
                 </button>
                 <button
                   type="button"
@@ -112,7 +117,7 @@ export default function KlausaManual() {
                     setIsDeleteOpen(true);
                   }}
                 >
-                  <Trash2 className="h-5 w-5 text-red" />
+                  <Trash2 className="h-5 w-5 text-red hover:cursor-pointer" />
                 </button>
               </div>
             </div>
