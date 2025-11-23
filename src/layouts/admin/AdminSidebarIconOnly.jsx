@@ -134,8 +134,8 @@ export function AdminSidebarIconOnly({ onExpand }) {
   const navigate = useNavigate();
   const [hoveredItem, setHoveredItem] = useState(null);
 
-  const handleLogout = () => {
-    logout();
+  const handleLogout = async () => {
+    await logout();
     navigate("/login");
   };
   const [activeItem, setActiveItem] = useState(null);
