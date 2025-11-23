@@ -13,31 +13,32 @@ import {
   ChecklistExcelDialog,
   DeleteChecklistExcelDialog,
 } from "@/components/admin/audit/ChecklistExcelDialog";
-import { checklistData } from "@/mocks/tableData";
+import { useAuditExcelChecklists } from "./hooks/useAuditExcelChecklists";
+import { useAuditChecklists } from "./hooks/useAuditChecklists";
 
 const PAGINATE_OPTIONS = [10, 20, 50, 100];
 
-function ChecklistExcelCard({ checklist, onView, onEdit, onDelete }) {
+function ChecklistExcelCard({ excelChecklist, onView, onEdit, onDelete }) {
   return (
     <div className="border-l-4 border-navy bg-white p-6 shadow-sm hover:shadow-md transition-shadow">
       <div className="flex justify-between items-start gap-4">
         <div className="flex-1">
           <h3 className="text-navy font-semibold text-lg mb-2">
-            {checklist.title}
+            {excelChecklist.name}
           </h3>
           <p className="text-gray-dark text-sm leading-relaxed mb-3">
-            {checklist.description}
+            {excelChecklist.description}
           </p>
           <div className="inline-block">
             <span className="text-xs bg-state text-navy px-3 py-1 rounded">
-              Checklist Audit: {checklist.title}
+              Checklist Audit: {excelChecklist.checklistName || "N/A"}
             </span>
           </div>
         </div>
         <div className="flex gap-2 shrink-0">
           <button
             type="button"
-            onClick={() => onView(checklist)}
+            onClick={() => onView(excelChecklist)}
             className="hover:bg-gray-100 p-2 rounded transition-colors"
             title="Lihat detail"
           >
@@ -45,17 +46,17 @@ function ChecklistExcelCard({ checklist, onView, onEdit, onDelete }) {
           </button>
           <button
             type="button"
-            onClick={() => onEdit(checklist)}
+            onClick={() => onEdit(excelChecklist)}
             className="hover:bg-blue-50 p-2 rounded transition-colors"
-            title="Edit checklist"
+            title="Edit checklist excel"
           >
             <FilePen className="text-[#2B7FFF] w-5 h-5" />
           </button>
           <button
             type="button"
-            onClick={() => onDelete(checklist)}
+            onClick={() => onDelete(excelChecklist)}
             className="hover:bg-red-50 p-2 rounded transition-colors"
-            title="Hapus checklist"
+            title="Hapus checklist excel"
           >
             <Trash2 className="text-[#FB2C36] w-5 h-5" />
           </button>
@@ -63,142 +64,6 @@ function ChecklistExcelCard({ checklist, onView, onEdit, onDelete }) {
       </div>
     </div>
   );
-}
-
-function useChecklistManagement() {
-  const navigate = useNavigate();
-  const [checklistList, setChecklistList] = useState(checklistData);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [perPage, setPerPage] = useState(10);
-  const [activePage, setActivePage] = useState(1);
-  const [selectedFilter, setSelectedFilter] = useState("Semua Checklist");
-  const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
-
-  // Dialog states
-  const [editDialogOpen, setEditDialogOpen] = useState(false);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [selectedChecklist, setSelectedChecklist] = useState(null);
-
-  const filterOptions = useMemo(() => {
-    return [{ value: "Semua Checklist" }];
-  }, []);
-
-  const filteredData = useMemo(() => {
-    let filtered = checklistList;
-
-    if (searchQuery) {
-      filtered = filtered.filter((item) =>
-        item.title.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    return filtered;
-  }, [checklistList, searchQuery]);
-
-  const totalData = filteredData.length;
-  const totalPages = Math.max(1, Math.ceil(totalData / perPage));
-  const currentPage = Math.min(activePage, totalPages);
-
-  const pagedData = useMemo(() => {
-    const startIndex = (currentPage - 1) * perPage;
-    return filteredData.slice(startIndex, startIndex + perPage);
-  }, [filteredData, currentPage, perPage]);
-
-  const handlePaginateChange = useCallback((value) => {
-    setPerPage(Number(value));
-    setActivePage(1);
-  }, []);
-
-  const handleAddChecklist = useCallback(
-    (formData) => {
-      const newChecklist = {
-        id: Math.max(...checklistList.map((c) => c.id), 0) + 1,
-        title: formData.name || formData.checklistTitle,
-        description: formData.description,
-        checklistId: formData.checklistId,
-      };
-      setChecklistList((prev) => [newChecklist, ...prev]);
-    },
-    [checklistList]
-  );
-
-  const handleEditChecklist = useCallback(
-    (formData) => {
-      setChecklistList((prev) =>
-        prev.map((item) =>
-          item.id === selectedChecklist.id
-            ? {
-                ...item,
-                title: formData.name || item.title,
-                description: formData.description,
-                checklistId: formData.checklistId,
-              }
-            : item
-        )
-      );
-      setEditDialogOpen(false);
-      setSelectedChecklist(null);
-    },
-    [selectedChecklist]
-  );
-
-  const handleDeleteChecklist = useCallback(() => {
-    setChecklistList((prev) =>
-      prev.filter((item) => item.id !== selectedChecklist.id)
-    );
-    setDeleteDialogOpen(false);
-    setSelectedChecklist(null);
-  }, [selectedChecklist]);
-
-  const handleView = useCallback(
-    (checklist) => {
-      navigate(`/admin/audit/checklist-excel/${checklist.id}/item`, {
-        state: {
-          checklistAuditName: checklist.title,
-          checklistExcelName: checklist.title,
-        },
-      });
-    },
-    [navigate]
-  );
-
-  const openEditDialog = useCallback((checklist) => {
-    setSelectedChecklist(checklist);
-    setEditDialogOpen(true);
-  }, []);
-
-  const openDeleteDialog = useCallback((checklist) => {
-    setSelectedChecklist(checklist);
-    setDeleteDialogOpen(true);
-  }, []);
-
-  return {
-    pagedData,
-    searchQuery,
-    setSearchQuery,
-    perPage,
-    currentPage,
-    setActivePage,
-    totalData,
-    totalPages,
-    handlePaginateChange,
-    handleAddChecklist,
-    handleEditChecklist,
-    handleDeleteChecklist,
-    handleView,
-    openEditDialog,
-    openDeleteDialog,
-    editDialogOpen,
-    setEditDialogOpen,
-    deleteDialogOpen,
-    setDeleteDialogOpen,
-    selectedChecklist,
-    selectedFilter,
-    setSelectedFilter,
-    filterOptions,
-    isFilterDropdownOpen,
-    setIsFilterDropdownOpen,
-  };
 }
 
 export default function ChecklistExcel() {
@@ -212,33 +77,125 @@ export default function ChecklistExcel() {
     },
   });
 
+  const navigate = useNavigate();
+
+  // Dialog states
+  const [editDialogOpen, setEditDialogOpen] = useState(false);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [selectedExcelChecklist, setSelectedExcelChecklist] = useState(null);
+  const [selectedFilter, setSelectedFilter] = useState("Semua Checklist");
+  const [isFilterDropdownOpen, setIsFilterDropdownOpen] = useState(false);
+
+  // Use audit checklists hook untuk data checklist (dropdown)
+  const { pagedData: checklists, isLoading: isLoadingChecklists } =
+    useAuditChecklists({
+      initialPerPage: 100, // Load all for dropdown
+    });
+
+  // Use audit excel checklists hook
   const {
-    pagedData,
+    excelChecklists,
+    isLoading,
+    currentPage,
+    totalPages,
+    totalData,
+    perPage,
+    setActivePage,
+    handlePaginateChange,
     searchQuery,
     setSearchQuery,
-    perPage,
-    currentPage,
-    setActivePage,
-    totalData,
-    totalPages,
-    handlePaginateChange,
-    handleAddChecklist,
-    handleEditChecklist,
-    handleDeleteChecklist,
-    handleView,
-    openEditDialog,
-    openDeleteDialog,
-    editDialogOpen,
-    setEditDialogOpen,
-    deleteDialogOpen,
-    setDeleteDialogOpen,
-    selectedChecklist,
-    selectedFilter,
-    setSelectedFilter,
-    filterOptions,
-    isFilterDropdownOpen,
-    setIsFilterDropdownOpen,
-  } = useChecklistManagement();
+    setSelectedChecklistId,
+    createExcelChecklist,
+    updateExcelChecklist,
+    deleteExcelChecklist,
+    isCreating,
+    isUpdating,
+    isDeleting,
+  } = useAuditExcelChecklists({
+    initialPerPage: 10,
+  });
+
+  // Filter options untuk dropdown
+  const filterOptions = useMemo(() => {
+    const options = [{ value: "Semua Checklist" }];
+    if (checklists && Array.isArray(checklists)) {
+      checklists.forEach((checklist) => {
+        options.push({ value: checklist.title });
+      });
+    }
+    return options;
+  }, [checklists]);
+
+  // Handler untuk add excel checklist
+  const handleAddExcelChecklist = useCallback(
+    async (payload) => {
+      await createExcelChecklist(payload);
+    },
+    [createExcelChecklist]
+  );
+
+  // Handler untuk edit excel checklist
+  const handleEditExcelChecklist = useCallback(
+    async (payload) => {
+      await updateExcelChecklist({
+        excelChecklistId: selectedExcelChecklist.id,
+        payload,
+      });
+      setEditDialogOpen(false);
+      setSelectedExcelChecklist(null);
+    },
+    [selectedExcelChecklist, updateExcelChecklist]
+  );
+
+  // Handler untuk delete excel checklist
+  const handleDeleteExcelChecklist = useCallback(async () => {
+    await deleteExcelChecklist(selectedExcelChecklist.id);
+    setDeleteDialogOpen(false);
+    setSelectedExcelChecklist(null);
+  }, [selectedExcelChecklist, deleteExcelChecklist]);
+
+  // Handler untuk view detail
+  const handleView = useCallback(
+    (excelChecklist) => {
+      navigate(`/admin/audit/checklist-excel/${excelChecklist.id}/item`, {
+        state: {
+          checklistAuditName: excelChecklist.checklistName,
+          checklistExcelName: excelChecklist.name,
+        },
+      });
+    },
+    [navigate]
+  );
+
+  // Handler untuk open edit dialog
+  const openEditDialog = useCallback((excelChecklist) => {
+    setSelectedExcelChecklist(excelChecklist);
+    setEditDialogOpen(true);
+  }, []);
+
+  // Handler untuk open delete dialog
+  const openDeleteDialog = useCallback((excelChecklist) => {
+    setSelectedExcelChecklist(excelChecklist);
+    setDeleteDialogOpen(true);
+  }, []);
+
+  // Handler untuk filter change
+  const handleFilterChange = useCallback(
+    (value) => {
+      setSelectedFilter(value);
+      if (value === "Semua Checklist") {
+        setSelectedChecklistId("");
+      } else if (checklists && Array.isArray(checklists)) {
+        const checklist = checklists.find((c) => c.title === value);
+        if (checklist) {
+          setSelectedChecklistId(checklist.id);
+        }
+      }
+    },
+    [checklists, setSelectedChecklistId]
+  );
+
+  const PAGINATE_OPTIONS = [10, 20, 50, 100];
 
   return (
     <div className="space-y-4">
@@ -259,26 +216,35 @@ export default function ChecklistExcel() {
           isMenuOpen={isFilterDropdownOpen}
           setIsMenuOpen={setIsFilterDropdownOpen}
           value={selectedFilter}
-          onChange={setSelectedFilter}
+          onChange={handleFilterChange}
           options={filterOptions}
           classNameButton="w-[280px]! h-14!"
           classNameDropdown="w-[280px]!"
           showFunnelIcon={true}
         />
 
-        <ChecklistExcelDialog mode="add" onSave={handleAddChecklist} />
+        <ChecklistExcelDialog
+          mode="add"
+          onSave={handleAddExcelChecklist}
+          isSubmitting={isCreating}
+          checklists={checklists || []}
+        />
       </div>
 
       <div className="space-y-3">
-        {pagedData.length === 0 ? (
+        {isLoading || isLoadingChecklists ? (
+          <div className="text-center py-12 text-gray-dark">
+            <p className="body">Memuat data...</p>
+          </div>
+        ) : excelChecklists.length === 0 ? (
           <div className="text-center py-12 text-gray-dark">
             <p className="body">Tidak ada checklist excel ditemukan</p>
           </div>
         ) : (
-          pagedData.map((checklist) => (
+          excelChecklists.map((excelChecklist) => (
             <ChecklistExcelCard
-              key={checklist.id}
-              checklist={checklist}
+              key={excelChecklist.id}
+              excelChecklist={excelChecklist}
               onView={handleView}
               onEdit={openEditDialog}
               onDelete={openDeleteDialog}
@@ -301,25 +267,28 @@ export default function ChecklistExcel() {
       )}
 
       {/* Edit Dialog */}
-      {selectedChecklist && (
+      {selectedExcelChecklist && (
         <ChecklistExcelDialog
-          key={`edit-${selectedChecklist.id}`}
+          key={`edit-${selectedExcelChecklist.id}`}
           mode="edit"
-          checklist={selectedChecklist}
-          onSave={handleEditChecklist}
+          excelChecklist={selectedExcelChecklist}
+          onSave={handleEditExcelChecklist}
           open={editDialogOpen}
           onOpenChange={setEditDialogOpen}
+          isSubmitting={isUpdating}
+          checklists={checklists || []}
         />
       )}
 
       {/* Delete Dialog */}
-      {selectedChecklist && (
+      {selectedExcelChecklist && (
         <DeleteChecklistExcelDialog
-          key={`delete-${selectedChecklist.id}`}
-          checklist={selectedChecklist}
-          onDelete={handleDeleteChecklist}
+          key={`delete-${selectedExcelChecklist.id}`}
+          excelChecklist={selectedExcelChecklist}
+          onDelete={handleDeleteExcelChecklist}
           open={deleteDialogOpen}
           onOpenChange={setDeleteDialogOpen}
+          isDeleting={isDeleting}
         />
       )}
     </div>

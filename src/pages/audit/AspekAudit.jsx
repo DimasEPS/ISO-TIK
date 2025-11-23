@@ -1,5 +1,6 @@
 import { useState, useMemo, useCallback } from "react";
-import { aspekAuditData, checklistData } from "@/mocks/tableData";
+import { useAuditAspects } from "./hooks/useAuditAspects";
+import { useAuditChecklists } from "./hooks/useAuditChecklists";
 import { SearchIcon } from "lucide-react";
 import {
   InputGroup,
@@ -16,99 +17,80 @@ import { StatusDropdown } from "@/components/admin/table/StatusDropdown";
 
 const PAGINATE_OPTIONS = [10, 20, 50, 100];
 
-function useAspekManagement() {
-  const [aspekList, setAspekList] = useState(aspekAuditData);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [perPage, setPerPage] = useState(10);
-  const [activePage, setActivePage] = useState(1);
-  const [selectedChecklist, setSelectedChecklist] = useState("Semua Checklist");
-  const [isChecklistDropdownOpen, setIsChecklistDropdownOpen] = useState(false);
-
+export default function AspekAudit() {
   // Dialog states
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedAspek, setSelectedAspek] = useState(null);
+  const [selectedChecklist, setSelectedChecklist] = useState("Semua Checklist");
+  const [isChecklistDropdownOpen, setIsChecklistDropdownOpen] = useState(false);
 
-  // Get unique checklists for filter
+  // Fetch checklists untuk dropdown filter
+  const { pagedData: checklists } = useAuditChecklists();
+
+  // Get checklist ID dari selected checklist name
+  const selectedChecklistId = useMemo(() => {
+    if (selectedChecklist === "Semua Checklist") return null;
+    const checklist = checklists.find((c) => c.title === selectedChecklist);
+    return checklist?.id || null;
+  }, [selectedChecklist, checklists]);
+
+  // Use aspects hook dengan filter checklist
+  const {
+    pagedData,
+    isLoading,
+    searchQuery,
+    setSearchQuery,
+    perPage,
+    activePage,
+    setActivePage,
+    totalPages,
+    totalData,
+    handlePaginateChange,
+    createAspect,
+    updateAspect,
+    deleteAspect,
+    isCreating,
+    isUpdating,
+    isDeleting,
+    setSelectedChecklistId: setChecklistFilter,
+  } = useAuditAspects();
+
+  // Update filter when selectedChecklistId changes
+  useMemo(() => {
+    setChecklistFilter(selectedChecklistId);
+  }, [selectedChecklistId, setChecklistFilter]);
+
+  // Build checklist options for dropdown
   const checklistOptions = useMemo(() => {
     const options = [{ value: "Semua Checklist" }];
-    checklistData.forEach((checklist) => {
+    checklists.forEach((checklist) => {
       options.push({ value: checklist.title });
     });
     return options;
-  }, []);
-
-  const filteredData = useMemo(() => {
-    let filtered = aspekList;
-
-    // Filter by search
-    if (searchQuery) {
-      filtered = filtered.filter((item) =>
-        item.name.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-    }
-
-    // Filter by checklist
-    if (selectedChecklist !== "Semua Checklist") {
-      const checklistId =
-        checklistData.findIndex((c) => c.title === selectedChecklist) + 1;
-      filtered = filtered.filter((item) => item.checklistId === checklistId);
-    }
-
-    return filtered;
-  }, [aspekList, searchQuery, selectedChecklist]);
-
-  const totalData = filteredData.length;
-  const totalPages = Math.max(1, Math.ceil(totalData / perPage));
-  const currentPage = Math.min(activePage, totalPages);
-
-  const pagedData = useMemo(() => {
-    const startIndex = (currentPage - 1) * perPage;
-    return filteredData.slice(startIndex, startIndex + perPage);
-  }, [filteredData, currentPage, perPage]);
-
-  const handlePaginateChange = useCallback((value) => {
-    setPerPage(Number(value));
-    setActivePage(1);
-  }, []);
+  }, [checklists]);
 
   const handleAddAspek = useCallback(
-    (formData) => {
-      const newAspek = {
-        id: Math.max(...aspekList.map((a) => a.id), 0) + 1,
-        name: formData.name,
-        description: formData.description || "Description for this aspek",
-        checklistId: 1,
-      };
-      setAspekList((prev) => [newAspek, ...prev]);
+    async (payload) => {
+      await createAspect(payload);
     },
-    [aspekList]
+    [createAspect]
   );
 
   const handleEditAspek = useCallback(
-    (formData) => {
-      setAspekList((prev) =>
-        prev.map((item) =>
-          item.id === selectedAspek.id
-            ? {
-                ...item,
-                name: formData.name,
-                description: formData.description,
-              }
-            : item
-        )
-      );
+    async (payload) => {
+      await updateAspect({ aspectId: selectedAspek.id, payload });
       setEditDialogOpen(false);
       setSelectedAspek(null);
     },
-    [selectedAspek]
+    [selectedAspek, updateAspect]
   );
 
-  const handleDeleteAspek = useCallback(() => {
-    setAspekList((prev) => prev.filter((item) => item.id !== selectedAspek.id));
+  const handleDeleteAspek = useCallback(async () => {
+    await deleteAspect(selectedAspek.id);
     setDeleteDialogOpen(false);
     setSelectedAspek(null);
-  }, [selectedAspek]);
+  }, [selectedAspek, deleteAspect]);
 
   const openEditDialog = useCallback((aspek) => {
     setSelectedAspek(aspek);
@@ -120,70 +102,13 @@ function useAspekManagement() {
     setDeleteDialogOpen(true);
   }, []);
 
-  const getChecklistName = useCallback((checklistId) => {
-    const checklist = checklistData.find(
-      (c, index) => index + 1 === checklistId
-    );
-    return checklist ? checklist.title : null;
-  }, []);
-
-  return {
-    pagedData,
-    searchQuery,
-    setSearchQuery,
-    perPage,
-    currentPage,
-    setActivePage,
-    totalData,
-    totalPages,
-    handlePaginateChange,
-    handleAddAspek,
-    handleEditAspek,
-    handleDeleteAspek,
-    openEditDialog,
-    openDeleteDialog,
-    editDialogOpen,
-    setEditDialogOpen,
-    deleteDialogOpen,
-    setDeleteDialogOpen,
-    selectedAspek,
-    selectedChecklist,
-    setSelectedChecklist,
-    checklistOptions,
-    isChecklistDropdownOpen,
-    setIsChecklistDropdownOpen,
-    getChecklistName,
-  };
-}
-
-export default function AspekAudit() {
-  const {
-    pagedData,
-    searchQuery,
-    setSearchQuery,
-    perPage,
-    currentPage,
-    setActivePage,
-    totalData,
-    totalPages,
-    handlePaginateChange,
-    handleAddAspek,
-    handleEditAspek,
-    handleDeleteAspek,
-    openEditDialog,
-    openDeleteDialog,
-    editDialogOpen,
-    setEditDialogOpen,
-    deleteDialogOpen,
-    setDeleteDialogOpen,
-    selectedAspek,
-    selectedChecklist,
-    setSelectedChecklist,
-    checklistOptions,
-    isChecklistDropdownOpen,
-    setIsChecklistDropdownOpen,
-    getChecklistName,
-  } = useAspekManagement();
+  const getChecklistName = useCallback(
+    (checklistId) => {
+      const checklist = checklists.find((c) => c.id === checklistId);
+      return checklist ? checklist.title : null;
+    },
+    [checklists]
+  );
 
   return (
     <div className="space-y-4">
@@ -211,11 +136,21 @@ export default function AspekAudit() {
           showFunnelIcon={true}
         />
 
-        <AspekDialog mode="add" onSave={handleAddAspek} />
+        <AspekDialog
+          mode="add"
+          onSave={handleAddAspek}
+          isSubmitting={isCreating}
+          checklistId={selectedChecklistId || checklists[0]?.id}
+          checklists={checklists}
+        />
       </div>
 
       <div className="space-y-3">
-        {pagedData.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-12 text-gray-dark">
+            <p className="body">Memuat data aspek audit...</p>
+          </div>
+        ) : pagedData.length === 0 ? (
           <div className="text-center py-12 text-gray-dark">
             <p className="body">Tidak ada aspek audit ditemukan</p>
           </div>
@@ -238,7 +173,7 @@ export default function AspekAudit() {
           onPaginateChange={handlePaginateChange}
           paginateValue={PAGINATE_OPTIONS}
           setActivePage={setActivePage}
-          activePage={currentPage}
+          activePage={activePage}
           onPageChange={setActivePage}
           totalPages={totalPages}
           totalData={totalData}
@@ -254,6 +189,9 @@ export default function AspekAudit() {
           onSave={handleEditAspek}
           open={editDialogOpen}
           onOpenChange={setEditDialogOpen}
+          isSubmitting={isUpdating}
+          checklistId={selectedAspek.checklistId}
+          checklists={checklists}
         />
       )}
 
@@ -265,6 +203,7 @@ export default function AspekAudit() {
           onDelete={handleDeleteAspek}
           open={deleteDialogOpen}
           onOpenChange={setDeleteDialogOpen}
+          isDeleting={isDeleting}
         />
       )}
     </div>

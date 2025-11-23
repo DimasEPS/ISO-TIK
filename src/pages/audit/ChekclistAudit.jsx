@@ -1,5 +1,5 @@
-import { useState, useMemo, useCallback } from "react";
-import { checklistData } from "@/mocks/tableData";
+import { useState, useCallback } from "react";
+import { useAuditChecklists } from "./hooks/useAuditChecklists";
 import { SearchBar, PaginateControls } from "@/components/admin/table";
 import { ChecklistCard } from "@/components/admin/audit/ChecklistCard";
 import {
@@ -9,67 +9,55 @@ import {
 
 const PAGINATE_OPTIONS = [10, 20, 50, 100];
 
-function useChecklistManagement() {
-  const [checklists, setChecklists] = useState(checklistData);
-  const [searchQuery, setSearchQuery] = useState("");
-  const [perPage, setPerPage] = useState(10);
-  const [activePage, setActivePage] = useState(1);
+export default function ChecklistAudit() {
   const [editDialogOpen, setEditDialogOpen] = useState(false);
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [selectedChecklist, setSelectedChecklist] = useState(null);
 
-  const filteredData = useMemo(() => {
-    if (!searchQuery) return checklists;
-    return checklists.filter((item) =>
-      item.title.toLowerCase().includes(searchQuery.toLowerCase())
-    );
-  }, [checklists, searchQuery]);
-
-  const totalData = filteredData.length;
-  const totalPages = Math.max(1, Math.ceil(totalData / perPage));
-  const currentPage = Math.min(activePage, totalPages);
-
-  const pagedData = useMemo(() => {
-    const startIndex = (currentPage - 1) * perPage;
-    return filteredData.slice(startIndex, startIndex + perPage);
-  }, [filteredData, currentPage, perPage]);
-
-  const handlePaginateChange = useCallback((value) => {
-    setPerPage(Number(value));
-    setActivePage(1);
-  }, []);
+  // Use the real API hook
+  const {
+    pagedData,
+    isLoading,
+    searchQuery,
+    setSearchQuery,
+    perPage,
+    activePage,
+    setActivePage,
+    totalPages,
+    totalData,
+    handlePaginateChange,
+    createChecklist,
+    updateChecklist,
+    deleteChecklist,
+    isCreating,
+    isUpdating,
+    isDeleting,
+  } = useAuditChecklists();
 
   const handleAddChecklist = useCallback(
-    (formData) => {
-      const newChecklist = {
-        id: Math.max(...checklists.map((c) => c.id), 0) + 1,
-        ...formData,
-      };
-      setChecklists((prev) => [newChecklist, ...prev]);
+    async (formData) => {
+      await createChecklist(formData);
     },
-    [checklists]
+    [createChecklist]
   );
 
   const handleEditChecklist = useCallback(
-    (formData) => {
-      setChecklists((prev) =>
-        prev.map((item) =>
-          item.id === selectedChecklist.id ? { ...item, ...formData } : item
-        )
-      );
+    async (formData) => {
+      await updateChecklist({
+        checklistId: selectedChecklist.id,
+        payload: formData,
+      });
       setEditDialogOpen(false);
       setSelectedChecklist(null);
     },
-    [selectedChecklist]
+    [selectedChecklist, updateChecklist]
   );
 
-  const handleDeleteChecklist = useCallback(() => {
-    setChecklists((prev) =>
-      prev.filter((item) => item.id !== selectedChecklist.id)
-    );
+  const handleDeleteChecklist = useCallback(async () => {
+    await deleteChecklist(selectedChecklist.id);
     setDeleteDialogOpen(false);
     setSelectedChecklist(null);
-  }, [selectedChecklist]);
+  }, [selectedChecklist, deleteChecklist]);
 
   const openEditDialog = useCallback((checklist) => {
     setSelectedChecklist(checklist);
@@ -81,52 +69,6 @@ function useChecklistManagement() {
     setDeleteDialogOpen(true);
   }, []);
 
-  return {
-    pagedData,
-    searchQuery,
-    setSearchQuery,
-    perPage,
-    currentPage,
-    setActivePage,
-    totalData,
-    totalPages,
-    handlePaginateChange,
-    handleAddChecklist,
-    handleEditChecklist,
-    handleDeleteChecklist,
-    openEditDialog,
-    openDeleteDialog,
-    editDialogOpen,
-    setEditDialogOpen,
-    deleteDialogOpen,
-    setDeleteDialogOpen,
-    selectedChecklist,
-  };
-}
-
-export default function ChecklistAudit() {
-  const {
-    pagedData,
-    searchQuery,
-    setSearchQuery,
-    perPage,
-    currentPage,
-    setActivePage,
-    totalData,
-    totalPages,
-    handlePaginateChange,
-    handleAddChecklist,
-    handleEditChecklist,
-    handleDeleteChecklist,
-    openEditDialog,
-    openDeleteDialog,
-    editDialogOpen,
-    setEditDialogOpen,
-    deleteDialogOpen,
-    setDeleteDialogOpen,
-    selectedChecklist,
-  } = useChecklistManagement();
-
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-4">
@@ -136,11 +78,19 @@ export default function ChecklistAudit() {
           onChange={(event) => setSearchQuery(event.target.value)}
         />
 
-        <ChecklistDialog mode="add" onSave={handleAddChecklist} />
+        <ChecklistDialog
+          mode="add"
+          onSave={handleAddChecklist}
+          isSubmitting={isCreating}
+        />
       </div>
 
       <div className="space-y-4">
-        {pagedData.length === 0 ? (
+        {isLoading ? (
+          <div className="text-center py-12 text-gray-dark">
+            <p className="body">Memuat data checklist...</p>
+          </div>
+        ) : pagedData.length === 0 ? (
           <div className="text-center py-12 text-gray-dark">
             <p className="body">Tidak ada checklist ditemukan</p>
           </div>
@@ -162,7 +112,7 @@ export default function ChecklistAudit() {
           onPaginateChange={handlePaginateChange}
           paginateValue={PAGINATE_OPTIONS}
           setActivePage={setActivePage}
-          activePage={currentPage}
+          activePage={activePage}
           onPageChange={setActivePage}
           totalPages={totalPages}
           totalData={totalData}
@@ -178,6 +128,7 @@ export default function ChecklistAudit() {
           onSave={handleEditChecklist}
           open={editDialogOpen}
           onOpenChange={setEditDialogOpen}
+          isSubmitting={isUpdating}
         />
       )}
 
@@ -189,6 +140,7 @@ export default function ChecklistAudit() {
           onDelete={handleDeleteChecklist}
           open={deleteDialogOpen}
           onOpenChange={setDeleteDialogOpen}
+          isDeleting={isDeleting}
         />
       )}
     </div>
