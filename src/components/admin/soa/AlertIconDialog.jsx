@@ -17,40 +17,65 @@ const titleMap = {
   delete: "Hapus Dokumen SoA",
 }
 
-export function AlertIconDialog({ type, row, className = "", trigger }) {
+const STATUS_OPTIONS = [
+  { label: "Draft", value: "draft" },
+  { label: "In Progress", value: "in_progress" },
+  { label: "Reviewed", value: "reviewed" },
+  { label: "Approved", value: "approved" },
+]
+
+const DISPLAY_STATUS_TO_API = {
+  Draft: "draft",
+  "In Progress": "in_progress",
+  Reviewed: "reviewed",
+  Approved: "approved",
+}
+
+export function AlertIconDialog({
+  type,
+  row,
+  className = "",
+  trigger,
+  onEditSubmit,
+  editSubmitting = false,
+}) {
   const navigate = useNavigate()
   const [open, setOpen] = useState(false)
   const readOnly = type === "view"
   const isDelete = type === "delete"
-  const [formData, setFormData] = useState({
-    noDoc: row.noDoc,
-    tanggalTerbit: row.tanggalTerbit,
-    judul: row.judul,
-    revisi: row.revisi,
-    klasifikasi: row.klasifikasi,
-    penyusun: row.penyusun,
-    ketuaIso: row.ketuaIso,
-    direktur: row.direktur,
-    status: row.status,
-  })
+  const [formData, setFormData] = useState(() => buildEditFormState(row))
   const [confirmInput, setConfirmInput] = useState("")
+  const [internalEditSubmitting, setInternalEditSubmitting] = useState(false)
+  const isEditSubmitting = editSubmitting || internalEditSubmitting
 
   useEffect(() => {
-    setFormData({
-      noDoc: row.noDoc,
-      tanggalTerbit: row.tanggalTerbit,
-      judul: row.judul,
-      revisi: row.revisi,
-      klasifikasi: row.klasifikasi,
-      penyusun: row.penyusun,
-      ketuaIso: row.ketuaIso,
-      direktur: row.direktur,
-      status: row.status,
-    })
+    setFormData(buildEditFormState(row))
   }, [row])
 
   const handleChange = (field) => (event) => {
     setFormData((prev) => ({ ...prev, [field]: event.target.value }))
+  }
+
+  const handleEditSubmit = async (event) => {
+    event.preventDefault()
+    const documentId = row?.id ?? row?.noDoc
+    if (!onEditSubmit || !documentId) {
+      console.warn("Edit submit ignored: missing handler or document identifier")
+      return
+    }
+
+    const payload = mapEditFormToPayload(formData)
+
+    try {
+      setInternalEditSubmitting(true)
+      await onEditSubmit(documentId, payload)
+      setOpen(false)
+    } catch (error) {
+      console.error("Gagal memperbarui dokumen SoA", error)
+      alert(error?.message ?? "Gagal memperbarui dokumen SoA")
+    } finally {
+      setInternalEditSubmitting(false)
+    }
   }
 
   const defaultTrigger = (
@@ -175,20 +200,23 @@ export function AlertIconDialog({ type, row, className = "", trigger }) {
             </div>
           </div>
         ) : (
-          <form className="grid gap-4">
+          <form className="grid gap-4" onSubmit={handleEditSubmit}>
             <div className="grid grid-cols-2 gap-4">
               <FormField label="No Dokumen">
                 <Input
                   value={formData.noDoc}
                   onChange={handleChange("noDoc")}
-                  className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0"
+                  className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0 h-12"
+                  disabled={isEditSubmitting}
                 />
               </FormField>
               <FormField label="Tanggal Terbit">
                 <Input
+                  type="date"
                   value={formData.tanggalTerbit}
                   onChange={handleChange("tanggalTerbit")}
-                  className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0"
+                  className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0 h-12"
+                  disabled={isEditSubmitting}
                 />
               </FormField>
             </div>
@@ -196,67 +224,132 @@ export function AlertIconDialog({ type, row, className = "", trigger }) {
               <Input
                 value={formData.judul}
                 onChange={handleChange("judul")}
-                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0"
+                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0 h-12"
+                disabled={isEditSubmitting}
               />
             </FormField>
             <FormField label="Revisi">
               <Input
                 value={formData.revisi}
                 onChange={handleChange("revisi")}
-                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0"
+                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0 h-12"
+                disabled={isEditSubmitting}
               />
             </FormField>
             <FormField label="Klasifikasi">
               <Input
                 value={formData.klasifikasi}
                 onChange={handleChange("klasifikasi")}
-                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0"
+                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0 h-12"
+                disabled={isEditSubmitting}
               />
             </FormField>
             <FormField label="Penyusun">
               <Input
                 value={formData.penyusun}
                 onChange={handleChange("penyusun")}
-                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0"
+                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0 h-12"
+                disabled={isEditSubmitting}
               />
             </FormField>
             <FormField label="Ketua ISO">
               <Input
                 value={formData.ketuaIso}
                 onChange={handleChange("ketuaIso")}
-                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0"
+                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0 h-12"
+                disabled={isEditSubmitting}
               />
             </FormField>
             <FormField label="Direktur">
               <Input
                 value={formData.direktur}
                 onChange={handleChange("direktur")}
-                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0"
+                className="bg-state text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:ring-0 h-12"
+                disabled={isEditSubmitting}
               />
             </FormField>
             <FormField label="Status">
               <select
                 value={formData.status}
                 onChange={handleChange("status")}
-                className="bg-state w-full text-center text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:outline-none h-12 rounded-md px-3"
+                className="bg-state w-full text-center text-navy border border-transparent focus:border-2 focus:border-navy-hover focus:outline-none h-12 rounded-md px-3 h-12"
+                disabled={isEditSubmitting}
               >
-                <option value="Draft">Draft</option>
-                <option value="In Progress">In Progress</option>
-                <option value="Reviewed">Reviewed</option>
-                <option value="Approved">Approved</option>
+                {STATUS_OPTIONS.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
               </select>
             </FormField>
             <div className="flex justify-end gap-2">
               <Button variant="ghost" type="button" onClick={() => setOpen(false)}>
                 Batal
               </Button>
-              <Button type="submit">Simpan</Button>
+              <Button type="submit" disabled={isEditSubmitting}>
+                {isEditSubmitting ? "Menyimpan..." : "Simpan"}
+              </Button>
             </div>
           </form>
         )}
       </DialogContent>
     </Dialog>
   )
+}
+
+function buildEditFormState(row = {}) {
+  const editable = row?.editable ?? {}
+
+  const resolvedPublishDate =
+    editable.publish_date ??
+    row?.tanggalTerbitInput ??
+    normalizeDateField(row?.tanggalTerbit) ??
+    ""
+
+  return {
+    noDoc: editable.document_number ?? row?.noDoc ?? "",
+    tanggalTerbit: resolvedPublishDate,
+    judul: editable.title ?? row?.judul ?? "",
+    revisi: editable.revision ?? sanitizeDisplayValue(row?.revisi),
+    klasifikasi: editable.classification ?? sanitizeDisplayValue(row?.klasifikasi),
+    penyusun: editable.compiler_name ?? sanitizeDisplayValue(row?.penyusun),
+    ketuaIso: editable.iso_chairman_name ?? sanitizeDisplayValue(row?.ketuaIso),
+    direktur: editable.director_name ?? sanitizeDisplayValue(row?.direktur),
+    status:
+      editable.status ??
+      row?.statusRaw ??
+      DISPLAY_STATUS_TO_API[row?.status] ??
+      "draft",
+  }
+}
+
+function mapEditFormToPayload(state = {}) {
+  return {
+    document_number: state.noDoc?.trim(),
+    publish_date: normalizeDateField(state.tanggalTerbit),
+    title: state.judul?.trim(),
+    revision: state.revisi?.trim(),
+    classification: state.klasifikasi?.trim() || null,
+    compiler_name: state.penyusun?.trim() || null,
+    iso_chairman_name: state.ketuaIso?.trim() || null,
+    director_name: state.direktur?.trim() || null,
+    status: state.status || "draft",
+  }
+}
+
+function sanitizeDisplayValue(value) {
+  if (value === "-" || value == null) {
+    return ""
+  }
+  return value
+}
+
+function normalizeDateField(value) {
+  if (!value) return undefined
+  const trimmed = value.trim()
+  if (!trimmed) return undefined
+  const [datePart] = trimmed.split("T")
+  return datePart
 }
 
 function InfoPair({ label, children }) {

@@ -3,3 +3,7 @@ export { ManualDocumentDetailDialog } from "./ManualDocumentDetailDialog";
 export { ManualDocumentDeleteDialog } from "./ManualDocumentDeleteDialog";
 export { ManualClauseFormDialog } from "./ManualClauseFormDialog";
 export { ManualClauseDeleteDialog } from "./ManualClauseDeleteDialog";
+export { ManualSubClauseFormDialog } from "./ManualSubClauseFormDialog";
+export { ManualSubClauseDeleteDialog } from "./ManualSubClauseDeleteDialog";
+export { ManualQuestionFormDialog } from "./ManualQuestionFormDialog";
+export { ManualQuestionDeleteDialog } from "./ManualQuestionDeleteDialog";

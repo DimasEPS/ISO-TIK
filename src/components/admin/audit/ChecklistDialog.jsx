@@ -1,5 +1,6 @@
 import { useState, useEffect } from "react";
 import { Plus, FilePen, AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -21,6 +22,7 @@ export function ChecklistDialog({
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  isSubmitting = false,
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const [formData, setFormData] = useState({
@@ -49,12 +51,60 @@ export function ChecklistDialog({
     ? "Lengkapi form di bawah ini untuk menambah checklist baru"
     : "Ubah informasi checklist sesuai kebutuhan";
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSave(formData);
-    setOpen(false);
-    if (isAddMode) {
-      setFormData({ title: "", description: "" });
+
+    // Validation
+    if (!formData.title?.trim()) {
+      toast.error("Judul checklist wajib diisi!");
+      return;
+    }
+
+    if (!formData.description?.trim()) {
+      toast.error("Deskripsi checklist wajib diisi!");
+      return;
+    }
+
+    // Map to backend field names
+    const payload = {
+      checklist_name: formData.title.trim(),
+      description: formData.description.trim(),
+    };
+
+    try {
+      await onSave?.(payload);
+
+      toast.success(
+        isAddMode
+          ? "Checklist berhasil ditambahkan!"
+          : "Checklist berhasil diupdate!",
+        {
+          description: `Checklist "${formData.title}" telah disimpan`,
+        }
+      );
+
+      setOpen(false);
+      if (isAddMode) {
+        setFormData({ title: "", description: "" });
+      }
+    } catch (error) {
+      const errorMsg =
+        error?.data?.message || error?.message || "Unknown error";
+      const errorDetails = error?.data?.errors
+        ? Object.entries(error.data.errors)
+            .map(([field, messages]) => `${field}: ${messages.join(", ")}`)
+            .join("\n")
+        : null;
+
+      toast.error(
+        isAddMode
+          ? "Gagal menambahkan checklist"
+          : "Gagal mengupdate checklist",
+        {
+          description: errorDetails || errorMsg,
+          duration: 7000,
+        }
+      );
     }
   };
 
@@ -89,7 +139,7 @@ export function ChecklistDialog({
         <form onSubmit={handleSubmit} className="space-y-4 py-2">
           <div className="space-y-2">
             <Label htmlFor="title" className="text-sm text-navy">
-              Judul Checklist
+              Judul Checklist <span className="text-red-500">*</span>
             </Label>
             <Input
               id="title"
@@ -98,12 +148,13 @@ export function ChecklistDialog({
               placeholder="Masukkan judul checklist"
               className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy h-12"
               required
+              disabled={isSubmitting}
             />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="description" className="text-sm text-navy">
-              Deskripsi
+              Deskripsi <span className="text-red-500">*</span>
             </Label>
             <Textarea
               id="description"
@@ -112,20 +163,31 @@ export function ChecklistDialog({
               placeholder="Masukkan deskripsi checklist"
               className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy min-h-[100px]"
               required
+              disabled={isSubmitting}
             />
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
             <DialogClose asChild>
-              <Button type="button" variant="outline" className="rounded-lg">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-lg"
+                disabled={isSubmitting}
+              >
                 Batal
               </Button>
             </DialogClose>
             <Button
               type="submit"
               className="rounded-lg bg-navy hover:bg-navy-hover"
+              disabled={isSubmitting}
             >
-              {isAddMode ? "Simpan Checklist" : "Simpan Perubahan"}
+              {isSubmitting
+                ? "Menyimpan..."
+                : isAddMode
+                ? "Simpan Checklist"
+                : "Simpan Perubahan"}
             </Button>
           </DialogFooter>
         </form>
@@ -140,6 +202,7 @@ export function DeleteChecklistDialog({
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  isDeleting = false,
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
@@ -149,12 +212,27 @@ export function DeleteChecklistDialog({
   const open = isControlled ? controlledOpen : internalOpen;
   const setOpen = isControlled ? controlledOnOpenChange : setInternalOpen;
 
-  const handleDelete = (e) => {
+  const handleDelete = async (e) => {
     e.preventDefault();
-    if (confirmText === checklist.title) {
-      onDelete();
+    if (confirmText !== checklist.title) {
+      toast.warning("Judul checklist tidak sesuai", {
+        description: "Pastikan Anda mengetik judul checklist dengan benar.",
+      });
+      return;
+    }
+
+    try {
+      await onDelete();
+      toast.success("Checklist berhasil dihapus!", {
+        description: `Checklist "${checklist.title}" telah dihapus dari sistem.`,
+      });
       setOpen(false);
       setConfirmText("");
+    } catch (error) {
+      toast.error("Gagal menghapus checklist", {
+        description:
+          error.message || "Terjadi kesalahan saat menghapus checklist.",
+      });
     }
   };
 
@@ -212,6 +290,7 @@ export function DeleteChecklistDialog({
                 onChange={(e) => setConfirmText(e.target.value)}
                 placeholder="Masukkan judul checklist"
                 className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy"
+                disabled={isDeleting}
               />
             </div>
 
@@ -222,16 +301,17 @@ export function DeleteChecklistDialog({
                   variant="outline"
                   className="rounded-lg"
                   onClick={() => setConfirmText("")}
+                  disabled={isDeleting}
                 >
                   Batal
                 </Button>
               </DialogClose>
               <Button
                 type="submit"
-                disabled={confirmText !== checklist.title}
+                disabled={confirmText !== checklist.title || isDeleting}
                 className="rounded-lg bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Hapus Checklist
+                {isDeleting ? "Menghapus..." : "Hapus Checklist"}
               </Button>
             </DialogFooter>
           </form>

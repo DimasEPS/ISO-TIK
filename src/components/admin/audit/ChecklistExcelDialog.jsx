@@ -1,5 +1,5 @@
 import { useState, useEffect } from "react";
-import { Plus, AlertTriangle, ChevronDown } from "lucide-react";
+import { Plus, AlertTriangle } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -14,29 +14,31 @@ import {
   DialogClose,
 } from "@/components/ui/dialog";
 import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuRadioGroup,
-  DropdownMenuRadioItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
-import { checklistData } from "@/mocks/tableData";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { toast } from "sonner";
 
 export function ChecklistExcelDialog({
   mode = "add",
-  checklist,
+  excelChecklist,
   onSave,
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  isSubmitting = false,
+  checklistId,
+  checklists = [],
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
-  const [isChecklistDropdownOpen, setIsChecklistDropdownOpen] = useState(false);
   const [formData, setFormData] = useState({
-    checklistId: checklist?.id || null,
-    checklistTitle: checklist?.title || "Pilih Checklist",
-    name: "",
-    description: checklist?.description || "",
+    name: excelChecklist?.name || "",
+    description: excelChecklist?.description || "",
+    selectedChecklistId:
+      excelChecklist?.checklistId || checklistId || undefined,
   });
 
   const isControlled = controlledOpen !== undefined;
@@ -44,15 +46,20 @@ export function ChecklistExcelDialog({
   const setOpen = isControlled ? controlledOnOpenChange : setInternalOpen;
 
   useEffect(() => {
-    if (checklist) {
+    if (excelChecklist) {
       setFormData({
-        checklistId: checklist.id,
-        checklistTitle: checklist.title,
-        name: "",
-        description: checklist.description || "",
+        name: excelChecklist.name || "",
+        description: excelChecklist.description || "",
+        selectedChecklistId:
+          excelChecklist.checklistId || checklistId || undefined,
       });
+    } else if (checklistId) {
+      setFormData((prev) => ({
+        ...prev,
+        selectedChecklistId: checklistId,
+      }));
     }
-  }, [checklist]);
+  }, [excelChecklist, checklistId]);
 
   const isAddMode = mode === "add";
   const title = isAddMode ? "Tambah Checklist Excel" : "Edit Checklist Excel";
@@ -60,28 +67,79 @@ export function ChecklistExcelDialog({
     ? "Lengkapi form di bawah ini untuk menambah checklist excel baru"
     : "Ubah informasi checklist excel sesuai kebutuhan";
 
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSave(formData);
-    setOpen(false);
-    if (isAddMode) {
-      setFormData({
-        checklistId: null,
-        checklistTitle: "Pilih Checklist",
-        name: "",
-        description: "",
-      });
-    }
+  const handleChange = (field) => (e) => {
+    setFormData((prev) => ({ ...prev, [field]: e.target.value }));
   };
 
-  const handleChecklistSelect = (checklistId) => {
-    const selected = checklistData.find((c) => c.id === parseInt(checklistId));
-    if (selected) {
-      setFormData((prev) => ({
-        ...prev,
-        checklistId: selected.id,
-        checklistTitle: selected.title,
-      }));
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+
+    // Validation
+    if (!formData.name || !formData.name.trim()) {
+      toast.warning("Nama checklist excel wajib diisi", {
+        description:
+          "Pastikan semua field yang wajib sudah terisi dengan benar.",
+      });
+      return;
+    }
+
+    if (!formData.description || !formData.description.trim()) {
+      toast.warning("Deskripsi wajib diisi", {
+        description:
+          "Pastikan semua field yang wajib sudah terisi dengan benar.",
+      });
+      return;
+    }
+
+    if (!formData.selectedChecklistId) {
+      toast.warning("Checklist belum dipilih", {
+        description: "Silakan pilih checklist terlebih dahulu.",
+      });
+      return;
+    }
+
+    try {
+      // Map frontend field names ke backend field names
+      const payload = {
+        excel_checklist_name: formData.name.trim(),
+        description: formData.description.trim(),
+        id_audit_checklists: formData.selectedChecklistId,
+      };
+
+      await onSave(payload);
+
+      toast.success(
+        isAddMode
+          ? "Checklist excel berhasil ditambahkan!"
+          : "Checklist excel berhasil diperbarui!",
+        {
+          description: isAddMode
+            ? `Checklist excel "${formData.name}" telah ditambahkan ke sistem.`
+            : `Perubahan pada checklist excel "${formData.name}" telah disimpan.`,
+        }
+      );
+
+      setOpen(false);
+      if (isAddMode) {
+        setFormData({
+          name: "",
+          description: "",
+          selectedChecklistId: checklistId || undefined,
+        });
+      }
+    } catch (error) {
+      console.error("Error response:", error);
+      console.error("Error data:", error.response?.data);
+
+      const errorMessage =
+        error.message || "Terjadi kesalahan saat menyimpan checklist excel.";
+      const errorDetails = error.response?.data?.errors
+        ? Object.values(error.response.data.errors).flat().join(", ")
+        : error.response?.data?.message || "";
+
+      toast.error("Gagal menyimpan checklist excel", {
+        description: errorDetails || errorMessage,
+      });
     }
   };
 
@@ -105,97 +163,88 @@ export function ChecklistExcelDialog({
         <form onSubmit={handleSubmit} className="space-y-4 py-2">
           <div className="space-y-2">
             <Label htmlFor="checklist" className="text-sm text-navy">
-              Checklist
+              Checklist <span className="text-red-600">*</span>
             </Label>
-            <DropdownMenu
-              open={isChecklistDropdownOpen}
-              onOpenChange={setIsChecklistDropdownOpen}
+            <Select
+              value={formData.selectedChecklistId}
+              onValueChange={(value) =>
+                setFormData((prev) => ({ ...prev, selectedChecklistId: value }))
+              }
+              disabled={isSubmitting}
             >
-              <DropdownMenuTrigger asChild>
-                <Button
-                  type="button"
-                  variant="outline"
-                  className="w-full h-12 justify-between rounded-lg bg-state text-navy border-gray-300 hover:bg-gray-light"
-                >
-                  <span
-                    className={
-                      formData.checklistId ? "text-navy" : "text-gray-dark"
-                    }
-                  >
-                    {formData.checklistTitle}
-                  </span>
-                  <ChevronDown
-                    className={`w-4 h-4 transition-transform ${
-                      isChecklistDropdownOpen ? "rotate-180" : ""
-                    }`}
-                  />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent className="w-[456px]" align="start">
-                <DropdownMenuRadioGroup
-                  value={String(formData.checklistId)}
-                  onValueChange={handleChecklistSelect}
-                >
-                  {checklistData.map((item) => (
-                    <DropdownMenuRadioItem
-                      key={item.id}
-                      value={String(item.id)}
-                      className="body text-navy bg-gray-light focus:bg-gray-dark2"
-                    >
-                      {item.title}
-                    </DropdownMenuRadioItem>
-                  ))}
-                </DropdownMenuRadioGroup>
-              </DropdownMenuContent>
-            </DropdownMenu>
+              <SelectTrigger className="rounded-lg bg-state focus:bg-gray-light focus:border-2 focus:border-navy h-12">
+                <SelectValue placeholder="Pilih checklist" />
+              </SelectTrigger>
+              <SelectContent>
+                {checklists.length === 0 ? (
+                  <div className="py-2 px-2 text-sm text-gray-dark">
+                    Tidak ada checklist tersedia
+                  </div>
+                ) : (
+                  checklists.map((checklist) => (
+                    <SelectItem key={checklist.id} value={checklist.id}>
+                      {checklist.title}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-gray-dark">
+              Pilih checklist yang akan dikaitkan dengan checklist excel ini
+            </p>
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="name" className="text-sm text-navy">
-              Nama Checklist Excel
+              Nama Checklist Excel <span className="text-red-600">*</span>
             </Label>
             <Input
               id="name"
               value={formData.name}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, name: e.target.value }))
-              }
-              placeholder="Masukkan nama Aspek"
+              onChange={handleChange("name")}
+              placeholder="Masukkan nama checklist excel"
               className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy h-12"
               required
+              disabled={isSubmitting}
             />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="description" className="text-sm text-navy">
-              Deskripsi
+              Deskripsi <span className="text-red-600">*</span>
             </Label>
             <Textarea
               id="description"
               value={formData.description}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  description: e.target.value,
-                }))
-              }
-              placeholder="Masukkan Deskripsi"
+              onChange={handleChange("description")}
+              placeholder="Masukkan deskripsi checklist excel"
               className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy min-h-[100px]"
               required
+              disabled={isSubmitting}
             />
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
             <DialogClose asChild>
-              <Button type="button" variant="outline" className="rounded-lg">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-lg"
+                disabled={isSubmitting}
+              >
                 Batal
               </Button>
             </DialogClose>
             <Button
               type="submit"
               className="rounded-lg bg-navy hover:bg-navy-hover"
+              disabled={isSubmitting}
             >
-              {isAddMode ? "Simpan Checklist Excel" : "Simpan Perubahan"}
+              {isSubmitting
+                ? "Menyimpan..."
+                : isAddMode
+                ? "Simpan Checklist Excel"
+                : "Simpan Perubahan"}
             </Button>
           </DialogFooter>
         </form>
@@ -205,11 +254,12 @@ export function ChecklistExcelDialog({
 }
 
 export function DeleteChecklistExcelDialog({
-  checklist,
+  excelChecklist,
   onDelete,
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  isDeleting = false,
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
@@ -218,12 +268,29 @@ export function DeleteChecklistExcelDialog({
   const open = isControlled ? controlledOpen : internalOpen;
   const setOpen = isControlled ? controlledOnOpenChange : setInternalOpen;
 
-  const handleDelete = (e) => {
+  const handleDelete = async (e) => {
     e.preventDefault();
-    if (confirmText === checklist.title) {
-      onDelete();
-      setOpen(false);
-      setConfirmText("");
+    if (confirmText === excelChecklist.name) {
+      try {
+        await onDelete();
+
+        toast.success("Checklist excel berhasil dihapus!", {
+          description: `Checklist excel "${excelChecklist.name}" telah dihapus dari sistem.`,
+        });
+
+        setOpen(false);
+        setConfirmText("");
+      } catch (error) {
+        console.error("Error deleting excel checklist:", error);
+
+        const errorMessage =
+          error.message || "Terjadi kesalahan saat menghapus checklist excel.";
+        const errorDetails = error.response?.data?.message || "";
+
+        toast.error("Gagal menghapus checklist excel", {
+          description: errorDetails || errorMessage,
+        });
+      }
     }
   };
 
@@ -263,37 +330,46 @@ export function DeleteChecklistExcelDialog({
 
           <div className="text-sm text-gray-600">
             <p className="mb-2">
-              Untuk menghapus checklist, ketik nama checklist berikut:
+              Untuk menghapus checklist excel, ketik nama checklist excel
+              berikut:
             </p>
-            <p className="font-semibold text-navy mb-3">{checklist.title}</p>
+            <p className="font-semibold text-navy mb-3">
+              {excelChecklist.name}
+            </p>
           </div>
 
           <form onSubmit={handleDelete} className="space-y-4">
             <div className="space-y-2">
               <Label htmlFor="confirm-text" className="text-sm text-gray-700">
-                Ketik nama aspek di sini
+                Ketik nama checklist excel di sini
               </Label>
               <Input
                 id="confirm-text"
                 value={confirmText}
                 onChange={(e) => setConfirmText(e.target.value)}
-                placeholder="Masukkan nama checklist"
+                placeholder="Masukkan nama checklist excel"
                 className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy h-12"
+                disabled={isDeleting}
               />
             </div>
 
             <DialogFooter className="gap-2 sm:gap-0">
               <DialogClose asChild>
-                <Button type="button" variant="outline" className="rounded-lg">
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="rounded-lg"
+                  disabled={isDeleting}
+                >
                   Batal
                 </Button>
               </DialogClose>
               <Button
                 type="submit"
-                disabled={confirmText !== checklist.title}
+                disabled={confirmText !== excelChecklist.name || isDeleting}
                 className="rounded-lg bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Hapus Checklist Excel
+                {isDeleting ? "Menghapus..." : "Hapus Checklist Excel"}
               </Button>
             </DialogFooter>
           </form>

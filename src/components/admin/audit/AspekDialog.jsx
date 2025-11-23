@@ -1,9 +1,17 @@
 import { useState, useEffect } from "react";
 import { Plus, AlertTriangle } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -21,11 +29,15 @@ export function AspekDialog({
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  isSubmitting = false,
+  checklistId,
+  checklists = [],
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const [formData, setFormData] = useState({
     name: aspek?.name || "",
     description: aspek?.description || "",
+    selectedChecklistId: aspek?.checklistId || checklistId || undefined,
   });
 
   const isControlled = controlledOpen !== undefined;
@@ -37,9 +49,15 @@ export function AspekDialog({
       setFormData({
         name: aspek.name || "",
         description: aspek.description || "",
+        selectedChecklistId: aspek.checklistId || checklistId || "",
       });
+    } else if (checklistId) {
+      setFormData((prev) => ({
+        ...prev,
+        selectedChecklistId: checklistId,
+      }));
     }
-  }, [aspek]);
+  }, [aspek, checklistId]);
 
   const isAddMode = mode === "add";
   const title = isAddMode ? "Tambah Aspek Audit" : "Edit Aspek Audit";
@@ -47,12 +65,79 @@ export function AspekDialog({
     ? "Lengkapi form di bawah ini untuk menambah aspek audit baru"
     : "Ubah informasi aspek audit sesuai kebutuhan";
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSave(formData);
-    setOpen(false);
-    if (isAddMode) {
-      setFormData({ name: "", description: "" });
+
+    // Validation
+    if (!formData.name || !formData.name.trim()) {
+      toast.warning("Nama aspek wajib diisi", {
+        description:
+          "Pastikan semua field yang wajib sudah terisi dengan benar.",
+      });
+      return;
+    }
+
+    if (!formData.description || !formData.description.trim()) {
+      toast.warning("Deskripsi wajib diisi", {
+        description:
+          "Pastikan semua field yang wajib sudah terisi dengan benar.",
+      });
+      return;
+    }
+
+    if (!formData.selectedChecklistId) {
+      toast.warning("Checklist belum dipilih", {
+        description: "Silakan pilih checklist terlebih dahulu.",
+      });
+      return;
+    }
+
+    try {
+      // Map frontend field names ke backend field names
+      const payload = {
+        aspect_name: formData.name.trim(),
+        description: formData.description.trim(),
+        id_audit_checklists: formData.selectedChecklistId,
+      };
+
+      await onSave(payload);
+
+      toast.success(
+        isAddMode
+          ? "Aspek audit berhasil ditambahkan!"
+          : "Aspek audit berhasil diperbarui!",
+        {
+          description: isAddMode
+            ? `Aspek "${formData.name}" telah ditambahkan ke sistem.`
+            : `Perubahan pada aspek "${formData.name}" telah disimpan.`,
+        }
+      );
+
+      setOpen(false);
+      if (isAddMode) {
+        setFormData({
+          name: "",
+          description: "",
+          selectedChecklistId: checklistId || undefined,
+        });
+      }
+    } catch (error) {
+      console.error("Error response:", error);
+      console.error("Error data:", error.response?.data);
+
+      const errorMessage =
+        error.message || "Terjadi kesalahan saat menyimpan aspek.";
+      const errorDetails = error.response?.data?.errors
+        ? Object.values(error.response.data.errors).flat().join(", ")
+        : error.response?.data?.message || errorMessage;
+
+      toast.error(
+        isAddMode ? "Gagal menambah aspek" : "Gagal memperbarui aspek",
+        {
+          description: errorDetails,
+          duration: 7000,
+        }
+      );
     }
   };
 
@@ -80,7 +165,7 @@ export function AspekDialog({
         <form onSubmit={handleSubmit} className="space-y-4 py-2">
           <div className="space-y-2">
             <Label htmlFor="name" className="text-sm text-navy">
-              Nama Aspek
+              Nama Aspek <span className="text-red-600">*</span>
             </Label>
             <Input
               id="name"
@@ -89,12 +174,13 @@ export function AspekDialog({
               placeholder="Masukkan nama aspek"
               className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy h-12"
               required
+              disabled={isSubmitting}
             />
           </div>
 
           <div className="space-y-2">
             <Label htmlFor="description" className="text-sm text-navy">
-              Deskripsi
+              Deskripsi <span className="text-red-600">*</span>
             </Label>
             <Textarea
               id="description"
@@ -103,20 +189,64 @@ export function AspekDialog({
               placeholder="Masukkan deskripsi aspek"
               className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy min-h-[100px]"
               required
+              disabled={isSubmitting}
             />
+          </div>
+
+          <div className="space-y-2">
+            <Label htmlFor="checklist" className="text-sm text-navy">
+              Checklist <span className="text-red-600">*</span>
+            </Label>
+            <Select
+              value={formData.selectedChecklistId}
+              onValueChange={(value) =>
+                setFormData((prev) => ({ ...prev, selectedChecklistId: value }))
+              }
+              disabled={isSubmitting}
+            >
+              <SelectTrigger className="rounded-lg bg-state focus:bg-gray-light focus:border-2 focus:border-navy h-12">
+                <SelectValue placeholder="Pilih checklist" />
+              </SelectTrigger>
+              <SelectContent>
+                {checklists.length === 0 ? (
+                  <div className="p-2 text-sm text-gray-dark text-center">
+                    Tidak ada checklist tersedia
+                  </div>
+                ) : (
+                  checklists.map((checklist) => (
+                    <SelectItem key={checklist.id} value={checklist.id}>
+                      {checklist.title}
+                    </SelectItem>
+                  ))
+                )}
+              </SelectContent>
+            </Select>
+            <p className="text-xs text-gray-dark">
+              Pilih checklist yang akan dikaitkan dengan aspek ini
+            </p>
           </div>
 
           <DialogFooter className="gap-2 sm:gap-0">
             <DialogClose asChild>
-              <Button type="button" variant="outline" className="rounded-lg">
+              <Button
+                type="button"
+                variant="outline"
+                className="rounded-lg"
+                disabled={isSubmitting}
+              >
                 Batal
               </Button>
             </DialogClose>
             <Button
               type="submit"
               className="rounded-lg bg-navy hover:bg-navy-hover"
+              disabled={isSubmitting}
             >
-              {isAddMode ? "Simpan Aspek" : "Simpan Perubahan"}
+              {isSubmitting
+                ? "Menyimpan..."
+                : isAddMode
+                ? "Simpan Aspek"
+                : "Simpan Perubahan"}
             </Button>
           </DialogFooter>
         </form>
@@ -131,6 +261,7 @@ export function DeleteAspekDialog({
   trigger,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
+  isDeleting = false,
 }) {
   const [internalOpen, setInternalOpen] = useState(false);
   const [confirmText, setConfirmText] = useState("");
@@ -139,12 +270,26 @@ export function DeleteAspekDialog({
   const open = isControlled ? controlledOpen : internalOpen;
   const setOpen = isControlled ? controlledOnOpenChange : setInternalOpen;
 
-  const handleDelete = (e) => {
+  const handleDelete = async (e) => {
     e.preventDefault();
-    if (confirmText === aspek.name) {
-      onDelete();
+    if (confirmText !== aspek.name) {
+      toast.warning("Nama aspek tidak sesuai", {
+        description: "Pastikan Anda mengetik nama aspek dengan benar.",
+      });
+      return;
+    }
+
+    try {
+      await onDelete();
+      toast.success("Aspek audit berhasil dihapus!", {
+        description: `Aspek "${aspek.name}" telah dihapus dari sistem.`,
+      });
       setOpen(false);
       setConfirmText("");
+    } catch (error) {
+      toast.error("Gagal menghapus aspek", {
+        description: error.message || "Terjadi kesalahan saat menghapus aspek.",
+      });
     }
   };
 
@@ -193,6 +338,7 @@ export function DeleteAspekDialog({
                 onChange={(e) => setConfirmText(e.target.value)}
                 placeholder="Masukkan nama aspek"
                 className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy"
+                disabled={isDeleting}
               />
             </div>
 
@@ -203,16 +349,17 @@ export function DeleteAspekDialog({
                   variant="outline"
                   className="rounded-lg"
                   onClick={() => setConfirmText("")}
+                  disabled={isDeleting}
                 >
                   Batal
                 </Button>
               </DialogClose>
               <Button
                 type="submit"
-                disabled={confirmText !== aspek.name}
+                disabled={confirmText !== aspek.name || isDeleting}
                 className="rounded-lg bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Hapus Aspek
+                {isDeleting ? "Menghapus..." : "Hapus Aspek"}
               </Button>
             </DialogFooter>
           </form>
