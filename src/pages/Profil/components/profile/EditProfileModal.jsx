@@ -2,6 +2,7 @@ import { useState, useRef, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -19,7 +20,15 @@ import { Camera, X } from "lucide-react";
  * @param {Object} user - User data to edit
  * @param {Function} onSave - Save changes callback
  */
-export function EditProfileModal({ isOpen, onClose, user, onSave }) {
+export function EditProfileModal({
+  isOpen,
+  onClose,
+  user,
+  onSave,
+  errors = {},
+  isSaving = false,
+  onFieldChange,
+}) {
   const [formData, setFormData] = useState({
     nama: user?.nama || "",
     nip: user?.nip || "",
@@ -29,10 +38,13 @@ export function EditProfileModal({ isOpen, onClose, user, onSave }) {
     email: user?.email || "",
     username: user?.username || "",
   });
-  
+  const [clientErrors, setClientErrors] = useState({});
+
   const [avatarPreview, setAvatarPreview] = useState(user?.avatar || null);
   const [avatarFile, setAvatarFile] = useState(null);
   const fileInputRef = useRef(null);
+
+  const combinedErrors = { ...clientErrors, ...errors };
 
   const getInitials = (name) => {
     if (!name) return "??";
@@ -45,6 +57,15 @@ export function EditProfileModal({ isOpen, onClose, user, onSave }) {
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
+    setClientErrors((prev) => {
+      if (!prev[field]) return prev;
+      const next = { ...prev };
+      delete next[field];
+      return next;
+    });
+    if (errors[field] && onFieldChange) {
+      onFieldChange(field);
+    }
   };
 
   const handleAvatarClick = () => {
@@ -55,18 +76,21 @@ export function EditProfileModal({ isOpen, onClose, user, onSave }) {
     const file = e.target.files?.[0];
     if (file) {
       // Validate file type
-      if (!file.type.startsWith('image/')) {
-        alert('File harus berupa gambar');
+      if (!file.type.startsWith("image/")) {
+        alert("File harus berupa gambar");
         return;
       }
       
       // Validate file size (max 5MB)
       if (file.size > 5 * 1024 * 1024) {
-        alert('Ukuran file maksimal 5MB');
+        alert("Ukuran file maksimal 5MB");
         return;
       }
 
       setAvatarFile(file);
+      if (errors.avatar && onFieldChange) {
+        onFieldChange("avatar");
+      }
       const reader = new FileReader();
       reader.onloadend = () => {
         setAvatarPreview(reader.result);
@@ -79,13 +103,47 @@ export function EditProfileModal({ isOpen, onClose, user, onSave }) {
     setAvatarPreview(null);
     setAvatarFile(null);
     if (fileInputRef.current) {
-      fileInputRef.current.value = '';
+      fileInputRef.current.value = "";
+    }
+    if (errors.avatar && onFieldChange) {
+      onFieldChange("avatar");
     }
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSave({ ...formData, avatar: avatarFile, avatarPreview });
+    const validationErrors = {};
+    if (!formData.nama.trim()) {
+      validationErrors.nama = "Nama lengkap wajib diisi";
+    }
+    if (!formData.email.trim()) {
+      validationErrors.email = "Email wajib diisi";
+    }
+    if (!formData.username.trim()) {
+      validationErrors.username = "Username wajib diisi";
+    }
+
+    if (Object.keys(validationErrors).length > 0) {
+      setClientErrors(validationErrors);
+      return;
+    }
+
+    setClientErrors((prev) => {
+      if (Object.keys(prev).length === 0) return prev;
+      return {};
+    });
+
+    const result = await onSave({
+      ...formData,
+      avatar: avatarFile,
+      avatarPreview,
+    });
+
+    if (result?.success) {
+      setClientErrors({});
+    } else if (result?.errorMessage) {
+      setClientErrors((prev) => ({ ...prev, submit: result.errorMessage }));
+    }
   };
 
   // Reset form when modal opens with new user data
@@ -102,16 +160,32 @@ export function EditProfileModal({ isOpen, onClose, user, onSave }) {
       });
       setAvatarPreview(user.avatar || null);
       setAvatarFile(null);
+      setClientErrors({});
     }
   }, [isOpen, user]);
 
+  useEffect(() => {
+    if (!isOpen) {
+      setClientErrors({});
+    }
+  }, [isOpen]);
+
+  const handleDialogChange = (openState) => {
+    if (!openState) {
+      onClose();
+    }
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog open={isOpen} onOpenChange={handleDialogChange}>
       <DialogContent className="sm:max-w-[600px] bg-white" showCloseButton={true}>
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-navy mb-2">
             Edit Data Diri
           </DialogTitle>
+          <DialogDescription className="text-gray-600">
+            Perbarui informasi akun dan profil Anda. Nama, email, dan username wajib diisi.
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
@@ -129,6 +203,7 @@ export function EditProfileModal({ isOpen, onClose, user, onSave }) {
                   type="button"
                   onClick={handleAvatarClick}
                   className="absolute bottom-0 right-0 bg-blue-600 hover:bg-blue-700 text-white rounded-full p-2 shadow-lg transition-colors"
+                  disabled={isSaving}
                 >
                   <Camera className="h-4 w-4" />
                 </button>
@@ -137,6 +212,7 @@ export function EditProfileModal({ isOpen, onClose, user, onSave }) {
                     type="button"
                     onClick={handleRemoveAvatar}
                     className="absolute top-0 right-0 bg-red-600 hover:bg-red-700 text-white rounded-full p-1 shadow-lg transition-colors"
+                    disabled={isSaving}
                   >
                     <X className="h-3 w-3" />
                   </button>
@@ -148,12 +224,16 @@ export function EditProfileModal({ isOpen, onClose, user, onSave }) {
                 accept="image/*"
                 onChange={handleAvatarChange}
                 className="hidden"
+                disabled={isSaving}
               />
               <div className="text-center">
                 <p className="text-sm text-gray-700 font-medium">Foto Profil</p>
                 <p className="text-xs text-gray-500 mt-1">
                   Klik ikon kamera untuk mengubah foto. Max 5MB
                 </p>
+                {combinedErrors.avatar && (
+                  <p className="text-xs text-red-500 mt-1">{combinedErrors.avatar}</p>
+                )}
               </div>
             </div>
 
@@ -167,59 +247,71 @@ export function EditProfileModal({ isOpen, onClose, user, onSave }) {
                   value={formData.nama}
                   onChange={(e) => handleChange("nama", e.target.value)}
                   placeholder="Masukkan nama lengkap"
-                  required
                   className="h-11"
+                  disabled={isSaving}
                 />
+                {combinedErrors.nama && (
+                  <p className="text-xs text-red-500">{combinedErrors.nama}</p>
+                )}
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="nip" className="text-sm text-gray-700">
-                  Nomor Induk Pegawai <span className="text-red-500">*</span>
+                  Nomor Induk Pegawai
                 </Label>
                 <Input
                   id="nip"
                   value={formData.nip}
                   onChange={(e) => handleChange("nip", e.target.value)}
                   placeholder="Masukkan NIP"
-                  required
                   className="h-11"
+                  disabled={isSaving}
                 />
+                {combinedErrors.nip && (
+                  <p className="text-xs text-red-500">{combinedErrors.nip}</p>
+                )}
               </div>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
                 <Label htmlFor="jabatan" className="text-sm text-gray-700">
-                  Jabatan <span className="text-red-500">*</span>
+                  Jabatan
                 </Label>
                 <Input
                   id="jabatan"
                   value={formData.jabatan}
                   onChange={(e) => handleChange("jabatan", e.target.value)}
                   placeholder="Masukkan jabatan"
-                  required
                   className="h-11"
+                  disabled={isSaving}
                 />
+                {combinedErrors.jabatan && (
+                  <p className="text-xs text-red-500">{combinedErrors.jabatan}</p>
+                )}
               </div>
 
               <div className="space-y-2">
                 <Label htmlFor="departemen" className="text-sm text-gray-700">
-                  Departemen <span className="text-red-500">*</span>
+                  Departemen
                 </Label>
                 <Input
                   id="departemen"
                   value={formData.departemen}
                   onChange={(e) => handleChange("departemen", e.target.value)}
                   placeholder="Masukkan departemen"
-                  required
                   className="h-11"
+                  disabled={isSaving}
                 />
+                {combinedErrors.departemen && (
+                  <p className="text-xs text-red-500">{combinedErrors.departemen}</p>
+                )}
               </div>
             </div>
 
             <div className="space-y-2">
               <Label htmlFor="telepon" className="text-sm text-gray-700">
-                Nomor Telepon <span className="text-red-500">*</span>
+                Nomor Telepon
               </Label>
               <Input
                 id="telepon"
@@ -227,9 +319,12 @@ export function EditProfileModal({ isOpen, onClose, user, onSave }) {
                 value={formData.telepon}
                 onChange={(e) => handleChange("telepon", e.target.value)}
                 placeholder="Masukkan nomor telepon"
-                required
                 className="h-11"
+                disabled={isSaving}
               />
+              {combinedErrors.telepon && (
+                <p className="text-xs text-red-500">{combinedErrors.telepon}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -242,9 +337,12 @@ export function EditProfileModal({ isOpen, onClose, user, onSave }) {
                 value={formData.email}
                 onChange={(e) => handleChange("email", e.target.value)}
                 placeholder="Masukkan email"
-                required
                 className="h-11"
+                disabled={isSaving}
               />
+              {combinedErrors.email && (
+                <p className="text-xs text-red-500">{combinedErrors.email}</p>
+              )}
             </div>
 
             <div className="space-y-2">
@@ -256,11 +354,18 @@ export function EditProfileModal({ isOpen, onClose, user, onSave }) {
                 value={formData.username}
                 onChange={(e) => handleChange("username", e.target.value)}
                 placeholder="Masukkan username"
-                required
                 className="h-11"
+                disabled={isSaving}
               />
+              {combinedErrors.username && (
+                <p className="text-xs text-red-500">{combinedErrors.username}</p>
+              )}
             </div>
           </div>
+
+          {combinedErrors.submit && (
+            <p className="text-sm text-red-500 mt-2">{combinedErrors.submit}</p>
+          )}
 
           <DialogFooter className="gap-3 sm:gap-3">
             <Button
@@ -268,14 +373,16 @@ export function EditProfileModal({ isOpen, onClose, user, onSave }) {
               variant="outline"
               onClick={onClose}
               className="h-11 px-6 border-gray-300"
+              disabled={isSaving}
             >
               Batal
             </Button>
             <Button
               type="submit"
               className="h-11 px-6 bg-blue-600 text-white hover:bg-blue-700"
+              disabled={isSaving}
             >
-              Simpan Perubahan
+              {isSaving ? "Menyimpan..." : "Simpan Perubahan"}
             </Button>
           </DialogFooter>
         </form>

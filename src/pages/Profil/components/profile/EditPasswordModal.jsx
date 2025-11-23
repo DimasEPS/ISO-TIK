@@ -1,7 +1,8 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -17,7 +18,14 @@ import { Eye, EyeOff } from "lucide-react";
  * @param {Function} onClose - Close modal callback
  * @param {Function} onSave - Save changes callback
  */
-export function EditPasswordModal({ isOpen, onClose, onSave }) {
+export function EditPasswordModal({
+  isOpen,
+  onClose,
+  onSave,
+  isSubmitting = false,
+  errors: serverErrors = {},
+  onFieldChange,
+}) {
   const [formData, setFormData] = useState({
     currentPassword: "",
     newPassword: "",
@@ -30,13 +38,41 @@ export function EditPasswordModal({ isOpen, onClose, onSave }) {
     confirm: false,
   });
 
-  const [errors, setErrors] = useState({});
+  const [clientErrors, setClientErrors] = useState({});
+  const combinedErrors = { ...clientErrors, ...serverErrors };
+
+  const resetFormState = () => {
+    setFormData({
+      currentPassword: "",
+      newPassword: "",
+      confirmPassword: "",
+    });
+    setClientErrors({});
+    setShowPasswords({
+      current: false,
+      new: false,
+      confirm: false,
+    });
+  };
+
+  useEffect(() => {
+    if (!isOpen) {
+      resetFormState();
+    }
+  }, [isOpen]);
 
   const handleChange = (field, value) => {
     setFormData((prev) => ({ ...prev, [field]: value }));
     // Clear error when user types
-    if (errors[field]) {
-      setErrors((prev) => ({ ...prev, [field]: "" }));
+    if (clientErrors[field]) {
+      setClientErrors((prev) => {
+        const next = { ...prev };
+        delete next[field];
+        return next;
+      });
+    }
+    if (serverErrors[field] && onFieldChange) {
+      onFieldChange(field);
     }
   };
 
@@ -63,50 +99,57 @@ export function EditPasswordModal({ isOpen, onClose, onSave }) {
       newErrors.confirmPassword = "Kata sandi tidak cocok";
     }
 
-    setErrors(newErrors);
+    setClientErrors(newErrors);
     return Object.keys(newErrors).length === 0;
   };
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    
-    if (validateForm()) {
-      onSave({
-        currentPassword: formData.currentPassword,
-        newPassword: formData.newPassword,
-      });
-      // Reset form
+
+    if (!validateForm()) {
+      return;
+    }
+
+    const result = await onSave({
+      currentPassword: formData.currentPassword,
+      newPassword: formData.newPassword,
+      confirmPassword: formData.confirmPassword,
+    });
+
+    if (result?.success) {
       setFormData({
         currentPassword: "",
         newPassword: "",
         confirmPassword: "",
       });
+      setClientErrors({});
+    } else if (result?.errorMessage) {
+      setClientErrors((prev) => ({ ...prev, submit: result.errorMessage }));
     }
   };
 
   const handleClose = () => {
     // Reset form and errors
-    setFormData({
-      currentPassword: "",
-      newPassword: "",
-      confirmPassword: "",
-    });
-    setErrors({});
-    setShowPasswords({
-      current: false,
-      new: false,
-      confirm: false,
-    });
+    resetFormState();
     onClose();
   };
 
+  const handleDialogChange = (openState) => {
+    if (!openState) {
+      handleClose();
+    }
+  };
+
   return (
-    <Dialog open={isOpen} onOpenChange={handleClose}>
+    <Dialog open={isOpen} onOpenChange={handleDialogChange}>
       <DialogContent className="sm:max-w-[500px] bg-white" showCloseButton={true}>
         <DialogHeader>
           <DialogTitle className="text-2xl font-bold text-navy mb-2">
             Edit Kata Sandi
           </DialogTitle>
+          <DialogDescription className="text-gray-600">
+            Pastikan kata sandi baru berbeda dengan kata sandi saat ini.
+          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit}>
@@ -122,12 +165,14 @@ export function EditPasswordModal({ isOpen, onClose, onSave }) {
                   value={formData.currentPassword}
                   onChange={(e) => handleChange("currentPassword", e.target.value)}
                   placeholder="Masukkan kata sandi saat ini"
-                  className={`h-11 pr-10 ${errors.currentPassword ? "border-red-500" : ""}`}
+                  className={`h-11 pr-10 ${combinedErrors.currentPassword ? "border-red-500" : ""}`}
+                  disabled={isSubmitting}
                 />
                 <button
                   type="button"
                   onClick={() => togglePasswordVisibility("current")}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  disabled={isSubmitting}
                 >
                   {showPasswords.current ? (
                     <EyeOff className="h-4 w-4" />
@@ -136,8 +181,8 @@ export function EditPasswordModal({ isOpen, onClose, onSave }) {
                   )}
                 </button>
               </div>
-              {errors.currentPassword && (
-                <p className="text-xs text-red-500">{errors.currentPassword}</p>
+              {combinedErrors.currentPassword && (
+                <p className="text-xs text-red-500">{combinedErrors.currentPassword}</p>
               )}
             </div>
 
@@ -152,12 +197,14 @@ export function EditPasswordModal({ isOpen, onClose, onSave }) {
                   value={formData.newPassword}
                   onChange={(e) => handleChange("newPassword", e.target.value)}
                   placeholder="Masukkan kata sandi baru"
-                  className={`h-11 pr-10 ${errors.newPassword ? "border-red-500" : ""}`}
+                  className={`h-11 pr-10 ${combinedErrors.newPassword ? "border-red-500" : ""}`}
+                  disabled={isSubmitting}
                 />
                 <button
                   type="button"
                   onClick={() => togglePasswordVisibility("new")}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  disabled={isSubmitting}
                 >
                   {showPasswords.new ? (
                     <EyeOff className="h-4 w-4" />
@@ -166,8 +213,8 @@ export function EditPasswordModal({ isOpen, onClose, onSave }) {
                   )}
                 </button>
               </div>
-              {errors.newPassword && (
-                <p className="text-xs text-red-500">{errors.newPassword}</p>
+              {combinedErrors.newPassword && (
+                <p className="text-xs text-red-500">{combinedErrors.newPassword}</p>
               )}
             </div>
 
@@ -182,12 +229,14 @@ export function EditPasswordModal({ isOpen, onClose, onSave }) {
                   value={formData.confirmPassword}
                   onChange={(e) => handleChange("confirmPassword", e.target.value)}
                   placeholder="Konfirmasi kata sandi baru"
-                  className={`h-11 pr-10 ${errors.confirmPassword ? "border-red-500" : ""}`}
+                  className={`h-11 pr-10 ${combinedErrors.confirmPassword ? "border-red-500" : ""}`}
+                  disabled={isSubmitting}
                 />
                 <button
                   type="button"
                   onClick={() => togglePasswordVisibility("confirm")}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-700"
+                  disabled={isSubmitting}
                 >
                   {showPasswords.confirm ? (
                     <EyeOff className="h-4 w-4" />
@@ -196,8 +245,8 @@ export function EditPasswordModal({ isOpen, onClose, onSave }) {
                   )}
                 </button>
               </div>
-              {errors.confirmPassword && (
-                <p className="text-xs text-red-500">{errors.confirmPassword}</p>
+              {combinedErrors.confirmPassword && (
+                <p className="text-xs text-red-500">{combinedErrors.confirmPassword}</p>
               )}
             </div>
 
@@ -210,20 +259,26 @@ export function EditPasswordModal({ isOpen, onClose, onSave }) {
             </div>
           </div>
 
+          {combinedErrors.submit && (
+            <p className="text-sm text-red-500 mt-2">{combinedErrors.submit}</p>
+          )}
+
           <DialogFooter className="gap-3 sm:gap-3">
             <Button
               type="button"
               variant="outline"
               onClick={handleClose}
               className="h-11 px-6 border-gray-300"
+              disabled={isSubmitting}
             >
               Batal
             </Button>
             <Button
               type="submit"
               className="h-11 px-6 bg-blue-600 text-white hover:bg-blue-700"
+              disabled={isSubmitting}
             >
-              Ubah Kata Sandi
+              {isSubmitting ? "Menyimpan..." : "Ubah Kata Sandi"}
             </Button>
           </DialogFooter>
         </form>

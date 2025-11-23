@@ -26,6 +26,8 @@ export function ActivityLogTable({
   totalData,
   onPageChange,
   onPaginateChange,
+  loading = false,
+  error = null,
 }) {
   const formatDate = (dateString) => {
     if (!dateString) return "-";
@@ -56,7 +58,19 @@ export function ActivityLogTable({
             </TableRow>
           </TableHeader>
           <TableBody>
-            {data.length === 0 ? (
+            {loading ? (
+              <TableRow>
+                <TableCell colSpan={3} className="text-center text-gray-500 py-8">
+                  Memuat data aktivitas...
+                </TableCell>
+              </TableRow>
+            ) : error ? (
+              <TableRow>
+                <TableCell colSpan={3} className="text-center text-red-500 py-8">
+                  {error}
+                </TableCell>
+              </TableRow>
+            ) : data.length === 0 ? (
               <TableRow>
                 <TableCell colSpan={3} className="text-center text-gray-500 py-8">
                   Tidak ada data aktivitas
@@ -66,13 +80,13 @@ export function ActivityLogTable({
               data.map((log, index) => (
                 <TableRow key={log.id || index}>
                   <TableCell className="text-navy">
-                    {formatDate(log.waktu || log.timestamp || log.createdAt)}
+                    {formatDate(log.created_at || log.waktu || log.timestamp || log.createdAt)}
                   </TableCell>
                   <TableCell className="text-navy font-medium">
-                    {log.aksi || log.action}
+                    {log.action_type || log.aksi || log.action}
                   </TableCell>
                   <TableCell className="text-navy">
-                    {log.tabel || log.table || log.module}
+                    {log.table_name || log.tabel || log.table || log.module}
                   </TableCell>
                 </TableRow>
               ))
@@ -81,7 +95,7 @@ export function ActivityLogTable({
         </Table>
       </div>
 
-      {data.length > 0 && (
+      {!loading && totalPages > 0 && (
         <PaginationControls
           perPage={perPage}
           currentPage={currentPage}
