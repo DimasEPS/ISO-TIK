@@ -171,6 +171,36 @@ export const auditService = {
       params,
     }),
 
+  /**
+   * Create new audit aspect
+   * @param {Object} data - { aspect_name, description, id_audit_checklists }
+   */
+  createAspect: (data) =>
+    apiClient("/admin/audit/aspects", {
+      method: "POST",
+      data: data,
+    }),
+
+  /**
+   * Update audit aspect
+   * @param {string} aspectId - UUID aspect
+   * @param {Object} data - { aspect_name, description, id_audit_checklists }
+   */
+  updateAspect: (aspectId, data) =>
+    apiClient(`/admin/audit/aspects/${aspectId}`, {
+      method: "PUT",
+      data: data,
+    }),
+
+  /**
+   * Delete audit aspect
+   * @param {string} aspectId - UUID aspect
+   */
+  deleteAspect: (aspectId) =>
+    apiClient(`/admin/audit/aspects/${aspectId}`, {
+      method: "DELETE",
+    }),
+
   // ========== AUDIT CATEGORIES ==========
   /**
    * Get detail audit category by ID
@@ -228,6 +258,36 @@ export const auditService = {
   getExcelChecklistQuestions: (excelChecklistId, params = {}) =>
     apiClient(`/audit/excel-checklists/${excelChecklistId}/questions`, {
       params,
+    }),
+
+  /**
+   * Create new audit excel checklist
+   * @param {Object} data - { excel_checklist_name, description, id_audit_checklists }
+   */
+  createExcelChecklist: (data) =>
+    apiClient("/admin/audit/excel-checklists", {
+      method: "POST",
+      data: data,
+    }),
+
+  /**
+   * Update audit excel checklist
+   * @param {string} excelChecklistId - UUID excel checklist
+   * @param {Object} data - { excel_checklist_name, description, id_audit_checklists }
+   */
+  updateExcelChecklist: (excelChecklistId, data) =>
+    apiClient(`/admin/audit/excel-checklists/${excelChecklistId}`, {
+      method: "PUT",
+      data: data,
+    }),
+
+  /**
+   * Delete audit excel checklist
+   * @param {string} excelChecklistId - UUID excel checklist
+   */
+  deleteExcelChecklist: (excelChecklistId) =>
+    apiClient(`/admin/audit/excel-checklists/${excelChecklistId}`, {
+      method: "DELETE",
     }),
 
   // ========== AUDIT EXCEL QUESTIONS ==========
