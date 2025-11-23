@@ -28,11 +28,12 @@ import AspekPertanyaan from "@/pages/audit/AspekPertanyaan";
 import PertanyaanExcel from "@/pages/audit/PertanyaanExcel";
 import ReviewAspekPertanyaan from "@/pages/audit/ReviewAspekPertanyaan";
 import ReviewPertanyaanExcel from "@/pages/audit/ReviewPertanyaanExcel";
-
+import SubKlausa from "@/pages/manual/SubKlausa";
 import ReviewJawabanSoA from "@/pages/soa/ReviewJawabanSoA";
 import Manual from "@/pages/manual";
 import ManualDocuments from "@/pages/manual/ManualDocuments";
 import KlausaManual from "@/pages/manual/KlausaManual";
+import PertanyaanManual from "@/pages/manual/PertanyaanManual";
 import ManajemenPengguna from "@/pages/user-management";
 import Profil from "@/pages/Profil";
 
@@ -86,6 +87,8 @@ const router = createBrowserRouter([
           { path: "klausa", element: <KlausaManual /> },
         ],
       },
+      { path: "manual/klausa/:clauseId/sub", element: <SubKlausa /> },
+      { path: "manual/klausa/:clauseId/pertanyaan", element: <PertanyaanManual /> },
       { path: "dokumen", element: <DokumenPage /> },
       { path: "ncr", element: <NCR /> },
       { path: "ncr/:id/kasus", element: <CaseListPage /> },
