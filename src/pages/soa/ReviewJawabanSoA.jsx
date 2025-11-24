@@ -1,10 +1,11 @@
 import { useCallback, useEffect, useMemo, useState } from "react"
 import { Link, useNavigate, useSearchParams } from "react-router-dom"
 import { useQuery, useQueryClient } from "@tanstack/react-query"
-import { List, Rows3, ChevronDown, ChevronRight, Check, X, Loader2 } from "lucide-react"
+import { List, Rows3, ChevronDown, Check, X, Loader2 } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import { toast } from "sonner"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -22,7 +23,6 @@ import {
 } from "@/components/ui/dialog"
 import { SearchBar, StatusDropdown } from "@/components/admin/table"
 import { ScaleTable } from "@/components/scaleTable"
-import { downloadSoAReviewPDF } from "@/generatePDF/generators"
 import { documentsService } from "@/services/documentsService"
 import { soaAnswersService } from "@/services/soaAnswersService"
 import { useReviewSoA } from "./hooks/useReviewSoA"
@@ -32,25 +32,21 @@ const CONTROL_METRICS = [
     field: "pl",
     code: "PL",
     label: "Persyaratan Legal",
-    description: "Kewajiban hukum dan regulasi yang berlaku untuk unit ini.",
   },
   {
     field: "kk",
     code: "KK",
     label: "Kewajiban Kontrak",
-    description: "Perjanjian kontrak dengan pihak ketiga penyedia layanan.",
   },
   {
     field: "pk_pb",
     code: "PK/PB",
     label: "Persyaratan Kerja / Praktik yang Baik",
-    description: "Standar prosedur operasional terbaik yang ditetapkan manajemen.",
   },
   {
     field: "hpr",
     code: "HPR",
     label: "Hasil Penilaian Risiko (Keamanan Informasi)",
-    description: "Mitigasi berdasarkan hasil analisis risiko keamanan informasi.",
   },
 ]
 
@@ -262,6 +258,8 @@ export default function ReviewJawabanSoA() {
     answersError,
     saveAnswer,
     isSavingAnswer,
+    reviewAnswer,
+    isReviewingAnswer,
   } = useReviewSoA({ documentId })
 
   const [viewMode, setViewMode] = useState(VIEW_MODE_OPTIONS[0].value)
@@ -333,12 +331,23 @@ export default function ReviewJawabanSoA() {
   )
   const [selectedDocuments, setSelectedDocuments] = useState(() => buildInitialDocuments(answerDetail))
   const [isDocumentPickerOpen, setIsDocumentPickerOpen] = useState(false)
-  const [isExporting, setIsExporting] = useState(false)
+  const [reviewComment, setReviewComment] = useState("")
 
   useEffect(() => {
     setFormState(buildInitialFormState({ detail: answerDetail, questionId: currentQuestion?.id, documentId }))
     setSelectedDocuments(buildInitialDocuments(answerDetail))
   }, [answerDetail?.id, currentQuestion?.id, documentId])
+
+  useEffect(() => {
+    if (!activeAnswerId) {
+      setReviewComment("")
+      return
+    }
+
+    const sourceComment =
+      answerDetail?.reviewer_comment ?? activeAnswerSummary?.reviewer_comment ?? ""
+    setReviewComment(sourceComment)
+  }, [activeAnswerId, answerDetail?.reviewer_comment, activeAnswerSummary?.reviewer_comment])
 
   useEffect(() => {
     setFormState((prev) => ({
@@ -362,7 +371,7 @@ export default function ReviewJawabanSoA() {
   const handleSaveAnswer = useCallback(async () => {
     if (isViewOnlyMode) return
     if (!documentId || !currentQuestion) {
-      window.alert("Pilih dokumen dan pertanyaan terlebih dahulu.")
+      toast.warning("Pilih dokumen dan pertanyaan terlebih dahulu.")
       return
     }
 
@@ -375,10 +384,10 @@ export default function ReviewJawabanSoA() {
           id_soa_questions: currentQuestion.id,
         },
       })
-      window.alert("Jawaban berhasil disimpan.")
+      toast.success("Jawaban berhasil disimpan.")
     } catch (error) {
       console.error("Gagal menyimpan jawaban SoA", error)
-      window.alert(error?.message ?? "Gagal menyimpan jawaban SoA.")
+      toast.error(error?.message ?? "Gagal menyimpan jawaban SoA.")
     }
   }, [activeAnswerSummary?.id, currentQuestion, documentId, formState, isViewOnlyMode, saveAnswer])
 
@@ -390,6 +399,39 @@ export default function ReviewJawabanSoA() {
     setSelectedDocuments(documents)
     setIsDocumentPickerOpen(false)
   }, [])
+
+  const handleSaveReviewComment = useCallback(async () => {
+    if (!activeAnswerId) {
+      toast.warning("Belum ada jawaban yang dapat ditinjau.")
+      return
+    }
+
+    const trimmedComment = reviewComment.trim()
+
+    if (!trimmedComment) {
+      toast.warning("Komentar reviewer tidak boleh kosong.")
+      return
+    }
+
+    try {
+      const response = await reviewAnswer({
+        answerId: activeAnswerId,
+        reviewer_comment: trimmedComment,
+      })
+
+      const updatedComment = response?.reviewer_comment ?? trimmedComment
+      setReviewComment(updatedComment)
+      toast.success("Komentar reviewer berhasil disimpan.")
+    } catch (error) {
+      console.error("Gagal menyimpan komentar reviewer", error)
+      const message =
+        error?.response?.data?.errors?.reviewer_comment?.[0] ??
+        error?.response?.data?.message ??
+        error?.message ??
+        "Gagal menyimpan komentar reviewer."
+      toast.error(message)
+    }
+  }, [activeAnswerId, reviewAnswer, reviewComment])
 
   const [tableDetailVersion, setTableDetailVersion] = useState(0)
 
@@ -446,42 +488,7 @@ export default function ReviewJawabanSoA() {
     setSelectedQuestion(target.question.id)
   }, [orderedQuestions, selectedQuestion])
 
-  const handleDownloadPdf = useCallback(async () => {
-    if (!document) {
-      window.alert("Dokumen SoA belum dipilih.")
-      return
-    }
-
-    setIsExporting(true)
-    try {
-      const sections = await buildSectionsWithFetch(categories, answersByQuestion, queryClient)
-      await downloadSoAReviewPDF(document, {
-        sections,
-        controlCodes: CONTROL_CODES,
-        filename: `review-soa-${(document.noDoc || document.judul || "dokumen").replace(/\s+/g, "-").toLowerCase()}.pdf`,
-      })
-    } catch (error) {
-      console.error("Gagal membuat PDF jawaban SoA", error)
-      window.alert(error?.message ?? "Gagal membuat PDF jawaban SoA.")
-    } finally {
-      setIsExporting(false)
-    }
-  }, [answersByQuestion, categories, document, queryClient])
-
-  const viewModeControl = (
-    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-end">
-      <Button
-        variant="outline"
-        className="w-full md:w-auto"
-        onClick={handleDownloadPdf}
-        disabled={!document || isExporting}
-      >
-        {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
-        Unduh PDF
-      </Button>
-      <ViewModeDropdown viewMode={viewMode} onViewModeChange={setViewMode} />
-    </div>
-  )
+  const viewModeControl = <ViewModeDropdown viewMode={viewMode} onViewModeChange={setViewMode} />
 
   if (!documentId) {
     return (
@@ -515,7 +522,9 @@ export default function ReviewJawabanSoA() {
     <div>
       <div
         className={`mx-auto flex h-[calc(100vh-120px)] w-full flex-col gap-6 overflow-hidden lg:grid lg:items-start lg:gap-8 ${
-          isTableMode ? "lg:grid-cols-[minmax(0,1fr)]" : "lg:grid-cols-[minmax(0,1fr)_365px]"
+          isTableMode
+            ? "lg:grid-cols-[minmax(0,1fr)_auto]"
+            : "lg:grid-cols-[minmax(0,1fr)_365px]"
         }`}
       >
         <div className={`flex h-full flex-col overflow-hidden ${isTableMode ? "" : "border-r border-navy-hover"}`}>
@@ -524,28 +533,29 @@ export default function ReviewJawabanSoA() {
               documentMeta={document}
               categoryOptions={categoryOptions}
               selectedCategory={selectedCategory}
-              viewModeControl={viewModeControl}
             />
           </div>
 
           {isTableMode ? (
             <div className="flex-1 min-h-0 pb-4 space-y-4 px-2">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
-                <SearchBar
-                  placeholder="Cari pertanyaan atau kendali"
-                  value={tableSearch}
-                  onChange={(event) => setTableSearch(event.target.value)}
-                  className="w-full"
-                />
-                <StatusDropdown
-                  isMenuOpen={isTableStatusOpen}
-                  setIsMenuOpen={setIsTableStatusOpen}
-                  value={tableCategory}
-                  onChange={setTableCategory}
-                  options={tableCategoryOptions}
-                  classNameButton="h-[56px] w-[219px]"
-                  classNameDropdown="w-[219px]"
-                />
+                <div className="flex flex-col gap-3 lg:flex-row lg:items-center flex-1">
+                  <SearchBar
+                    placeholder="Cari pertanyaan atau kendali"
+                    value={tableSearch}
+                    onChange={(event) => setTableSearch(event.target.value)}
+                    className="w-full"
+                  />
+                  <StatusDropdown
+                    isMenuOpen={isTableStatusOpen}
+                    setIsMenuOpen={setIsTableStatusOpen}
+                    value={tableCategory}
+                    onChange={setTableCategory}
+                    options={tableCategoryOptions}
+                    classNameButton="h-[56px] w-[219px]"
+                    classNameDropdown="w-[219px]"
+                  />
+                </div>
               </div>
               <LegendBar />
               <ScaleTable
@@ -569,7 +579,15 @@ export default function ReviewJawabanSoA() {
                   onRemoveDocument={handleRemoveDocument}
                   readOnly={isViewOnlyMode}
                 />
-                <CommentCard reviewerComment={activeAnswerSummary?.reviewer_comment} />
+                {isViewOnlyMode && (
+                  <CommentCard
+                    value={reviewComment}
+                    onChange={setReviewComment}
+                    onSave={handleSaveReviewComment}
+                    isSaving={isReviewingAnswer}
+                    disabled={!activeAnswerId}
+                  />
+                )}
                 <ActionBar
                   readOnly={isViewOnlyMode}
                   onSave={handleSaveAnswer}
@@ -582,19 +600,23 @@ export default function ReviewJawabanSoA() {
           )}
         </div>
 
-        {!isTableMode && (
-          <aside className="space-y-4 overflow-y-auto lg:sticky lg:top-[88px] lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto ">
-            <LegendCard activeCategoryCode={selectedCategory} />
-            <Navigator
-              sections={categories}
-              selectedCategory={selectedCategory}
-              onCategoryChange={setSelectedCategory}
-              selectedQuestion={selectedQuestion}
-              onQuestionChange={setSelectedQuestion}
-              answersByQuestion={answersByQuestion}
-            />
-          </aside>
-        )}
+        <div className="flex flex-col gap-4 mb-4 lg:mb-0 lg:col-start-2 lg:pt-4 lg:items-end">
+          <div className="flex justify-end w-full lg:w-auto">{viewModeControl}</div>
+
+          {!isTableMode && (
+            <aside className="space-y-4 overflow-y-auto lg:sticky lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto">
+              <LegendCard activeCategoryCode={selectedCategory} />
+              <Navigator
+                sections={categories}
+                selectedCategory={selectedCategory}
+                onCategoryChange={setSelectedCategory}
+                selectedQuestion={selectedQuestion}
+                onQuestionChange={setSelectedQuestion}
+                answersByQuestion={answersByQuestion}
+              />
+            </aside>
+          )}
+        </div>
       </div>
 
       <DocumentPickerDialog
@@ -607,19 +629,20 @@ export default function ReviewJawabanSoA() {
   )
 }
 
-function PageHeader({ documentMeta, categoryOptions, selectedCategory, viewModeControl }) {
+function PageHeader({ documentMeta, categoryOptions, selectedCategory }) {
   const categoryLabel = categoryOptions.find((option) => option.value === selectedCategory)?.label ?? "-"
 
   return (
     <section>
       <div className="relative space-y-5 py-4">
-        <div className="w-full">{viewModeControl}</div>
-        <div className="flex flex-wrap items-center gap-2 text-sm">
-          <Link to={`/admin/soa/dokumen`} className="small text-gray-dark hover:text-blue-dark">
-            Dokumen SOA
-          </Link>
-          <span className="text-gray-dark">&gt;</span>
-          <span className="small text-blue-dark">Pengisian Jawaban SOA</span>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div className="flex flex-wrap items-center gap-2 text-sm">
+            <Link to={`/admin/soa/dokumen`} className="small text-gray-dark hover:text-blue-dark">
+              Dokumen SOA
+            </Link>
+            <span className="text-gray-dark">&gt;</span>
+            <span className="small text-blue-dark">Pengisian Jawaban SOA</span>
+          </div>
         </div>
 
         <div className="grid gap-6 lg:grid-cols-3">
@@ -705,19 +728,19 @@ function QuestionCard({
           </div>
         </div>
 
-        <div className="rounded-2xl border border-[#0F2257] bg-[#030B26] overflow-hidden">
+  <div className="rounded border overflow-hidden">
           <div className="overflow-x-auto">
-            <table className="w-full table-fixed border-t border-[#0F2257] text-sm text-white">
-              <thead>
+            <table className="w-full table-fixed border border-navy text-sm text-blue-dark">
+              <thead className="border-b border-navy">
                 <tr>
-                  <th className="bg-[#DDE6FF] px-6 py-3 text-left text-base font-semibold text-[#0E1B3D]">
+                  <th className="bg-blue-light px-6 py-3 text-left text-base border-r border-navy font-semibold text-blue-dark">
                     Kendali yang Dipilih &amp; Alasan Pemilihan
                   </th>
                   {CONTROL_VALUE_OPTIONS.map((option, index) => (
                     <th
                       key={option.value}
-                      className={`bg-[#DDE6FF] px-4 py-3 text-center text-base font-semibold text-[#0E1B3D] ${
-                        index === CONTROL_VALUE_OPTIONS.length - 1 ? "" : "border-r border-[#B8C5F5]"
+                      className={`bg-blue-light px-4 py-3 text-center text-base font-semibold text-blue-dark ${
+                        index === CONTROL_VALUE_OPTIONS.length - 1 ? "" : "border-r border-navy"
                       }`}
                     >
                       {option.label}
@@ -729,11 +752,12 @@ function QuestionCard({
                 {controlMetrics.map((metric, metricIndex) => (
                   <tr
                     key={metric.field}
-                    className={`bg-[#050E33] text-sm ${metricIndex !== controlMetrics.length - 1 ? "border-b border-[#101C46]" : ""}`}
+                    className={`bg-transparent text-sm ${
+                      metricIndex !== controlMetrics.length - 1 ? "border-b border-navy" : ""
+                    }`}
                   >
-                    <td className="px-6 py-4">
-                      <p className="font-semibold text-white">{metric.label}</p>
-                      <p className="text-xs text-[#7D8BC2] mt-1">{metric.description}</p>
+                    <td className="px-6 py-4 border-r border-navy">
+                      <p className="font-semibold text-blue-dark">{metric.label}</p>
                     </td>
                     {CONTROL_VALUE_OPTIONS.map((option, optionIndex) => {
                       const isSelected = formState[metric.field] === option.value
@@ -754,7 +778,6 @@ function QuestionCard({
                               onChange={(event) => onMetricChange(metric.field, event.target.value)}
                               disabled={readOnly}
                             />
-                            <span className={isSelected ? "font-semibold text-white" : "text-[#95A3D7]"}>{option.label}</span>
                           </label>
                         </td>
                       )
@@ -854,19 +877,36 @@ function RelatedDocs({ docs, onAddDocuments, onRemoveDocument, readOnly }) {
   )
 }
 
-function CommentCard({ reviewerComment }) {
+function CommentCard({ value, onChange, onSave, isSaving, disabled }) {
+  const handleChange = (event) => {
+    onChange?.(event.target.value)
+  }
+
   return (
-    <section className="space-y-3 rounded-2xl border border-[#D8E2FF] bg-white p-6 shadow-sm">
+    <section className="space-y-4 rounded-2xl border border-[#D8E2FF] bg-white p-6 shadow-sm">
       <div>
         <p className="text-sm font-semibold text-navy">Komentar Reviewer</p>
-        <p className="text-xs text-gray-500">Komentar hanya dapat ditambahkan melalui proses review.</p>
+        <p className="text-xs text-gray-500">Tambahkan catatan saat meninjau jawaban.</p>
       </div>
       <textarea
-        value={reviewerComment || ""}
-        readOnly
-        placeholder="Belum ada komentar reviewer"
-        className="min-h-[140px] w-full rounded-2xl border border-[#E3E9FF] bg-[#ECEFF5] p-4 text-sm text-gray-dark"
+        value={value ?? ""}
+        onChange={handleChange}
+        placeholder="Tulis komentar reviewer"
+        readOnly={disabled}
+        className={`min-h-[140px] w-full rounded-2xl border border-[#E3E9FF] p-4 text-sm text-gray-dark focus-visible:border-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB2FF] ${
+          disabled ? "bg-[#ECEFF5]" : "bg-[#F6F7FB]"
+        }`}
       />
+      {disabled ? (
+        <p className="text-xs text-gray-500">Komentar reviewer tersedia setelah jawaban disimpan.</p>
+      ) : (
+        <div className="flex justify-end">
+          <Button onClick={onSave} disabled={isSaving} className="bg-navy text-white hover:bg-navy/90">
+            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
+            Simpan Komentar
+          </Button>
+        </div>
+      )}
     </section>
   )
 }
@@ -894,7 +934,7 @@ function ActionBar({ readOnly, onSave, onPrevQuestion, onNextQuestion, isSaving 
 
 function LegendCard({ activeCategoryCode }) {
   return (
-    <section className="rounded-[4px] border border-blue-dark bg-blue-light text-sm text-[#1F2D56] shadow-sm">
+    <section className="w-full md:w-[364px] rounded border border-blue-dark bg-blue-light text-sm text-[#1F2D56] shadow-sm">
       <div className="space-y-2 px-5 py-4">
         <p className="font-semibold text-navy">Keterangan:</p>
         <div className="space-y-1 text-blue-dark">
@@ -930,7 +970,7 @@ function LegendBar() {
   ]
 
   return (
-    <div className="rounded-[4px] border border-blue-500 bg-[#EAF2FF] p-4 text-xs text-blue-700">
+    <div className="rounded border border-blue-500 bg-[#EAF2FF] p-4 text-xs text-blue-700">
       <p className="body-medium text-navy-active mb-2">Keterangan:</p>
       <div className="flex flex-wrap gap-x-6 gap-y-1 small-medium">
         {entries.map((item) => (
@@ -960,7 +1000,7 @@ function Navigator({ sections, selectedCategory, onCategoryChange, selectedQuest
   }
 
   return (
-    <section className="space-y-4 p-5 text-sm shadow-sm">
+    <section className="w-full md:w-[364px] space-y-4 p-5 text-sm shadow-sm">
       <p className="heading-4 text-navy">Navigator Pertanyaan</p>
       <ScrollArea className="max-h-[60vh] pr-1">
         <div className="space-y-2">
@@ -980,10 +1020,10 @@ function Navigator({ sections, selectedCategory, onCategoryChange, selectedQuest
                   }`}
                 >
                   <span className="text-xs">
-                    <span className="bg-navy text-gray-light mr-2 px-2 py-1 rounded-[4px]">{section.code}</span>
+                    <span className="bg-navy text-gray-light mr-2 px-2 py-1 rounded">{section.code}</span>
                     <span className="ml-1 body text-navy">{section.title}</span>
                   </span>
-                  <ChevronRight className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
+                  <ChevronDown className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-180" : ""}`} />
                 </button>
 
                 {isExpanded && section.questions.length > 0 && (
@@ -1039,7 +1079,7 @@ function ViewModeDropdown({ viewMode, onViewModeChange }) {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex items-center justify-between gap-2 rounded-[4px] border border-navy w-full md:w-[364px] h-12 bg-state px-4 py-2 text-sm body text-navy shadow-sm"
+          className="flex items-center justify-between gap-2 rounded border border-navy w-full md:w-[364px] h-12 bg-state px-4 py-2 text-sm body text-navy shadow-sm"
         >
           <div className="flex items-center gap-2">
             <ActiveIcon className="text-gray-500" />

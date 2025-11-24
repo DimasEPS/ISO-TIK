@@ -1,4 +1,5 @@
 import { useState, useCallback, useMemo } from "react";
+import { toast } from "sonner";
 import { useNavigate, useParams } from "react-router-dom";
 import { usePageTemplate } from "@/hooks/usePageTemplate";
 import { Button } from "@/components/ui/button";
@@ -139,8 +140,10 @@ export default function CaseListPage() {
       });
       setIsEditModalOpen(false);
       setSelectedCase(null);
+      toast.success("Kasus NCR berhasil diperbarui.");
     } catch (error) {
       console.error("Gagal mengupdate kasus:", error);
+      toast.error(error?.message || "Gagal memperbarui kasus NCR.");
     }
   };
 
@@ -150,8 +153,10 @@ export default function CaseListPage() {
       await deleteMutation.mutateAsync(caseData.id);
       setIsDeleteModalOpen(false);
       setSelectedCase(null);
+      toast.success("Kasus NCR berhasil dihapus.");
     } catch (error) {
       console.error("Gagal menghapus kasus:", error);
+      toast.error(error?.message || "Gagal menghapus kasus NCR.");
     }
   };
 
@@ -181,8 +186,10 @@ export default function CaseListPage() {
         documentId: id,
       });
       setIsAddModalOpen(false);
+      toast.success("Kasus NCR berhasil ditambahkan.");
     } catch (error) {
       console.error("Gagal menambah kasus:", error);
+      toast.error(error?.message || "Gagal menambah kasus NCR.");
     }
   };
 

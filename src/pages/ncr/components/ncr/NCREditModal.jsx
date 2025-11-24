@@ -14,10 +14,12 @@ import { useState, useEffect } from "react";
 
 export function NCREditModal({ isOpen, onClose, ncrData, onSave }) {
   const [formData, setFormData] = useState({
+    documentNumber: "",
     title: "",
     description: "",
   });
   const [hasInteracted, setHasInteracted] = useState({
+    documentNumber: false,
     title: false,
     description: false,
   });
@@ -25,10 +27,12 @@ export function NCREditModal({ isOpen, onClose, ncrData, onSave }) {
   useEffect(() => {
     if (ncrData) {
       setFormData({
+        documentNumber: ncrData.document_number || ncrData.documentNumber || "",
         title: ncrData.title || "",
         description: ncrData.description || "",
       });
       setHasInteracted({
+        documentNumber: false,
         title: false,
         description: false,
       });
@@ -45,6 +49,7 @@ export function NCREditModal({ isOpen, onClose, ncrData, onSave }) {
 
   const handleCancel = () => {
     setFormData({
+      documentNumber: ncrData?.document_number || ncrData?.documentNumber || "",
       title: ncrData?.title || "",
       description: ncrData?.description || "",
     });
@@ -65,6 +70,29 @@ export function NCREditModal({ isOpen, onClose, ncrData, onSave }) {
           </DialogHeader>
 
           <div className="space-y-6 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="documentNumber" className="text-sm text-gray-dark">
+                Nomor Dokumen NCR
+              </Label>
+              <Input
+                id="documentNumber"
+                value={formData.documentNumber}
+                onChange={(e) => {
+                  setFormData({ ...formData, documentNumber: e.target.value });
+                  if (!hasInteracted.documentNumber) {
+                    setHasInteracted({ ...hasInteracted, documentNumber: true });
+                  }
+                }}
+                onFocus={() => {
+                  if (!hasInteracted.documentNumber) {
+                    setFormData({ ...formData, documentNumber: "" });
+                  }
+                }}
+                className="w-full bg-gray-light border-gray-300 focus:border-black focus:border-2 focus-visible:ring-0"
+                placeholder="Contoh: NCR-001-2025"
+              />
+            </div>
+
             <div className="space-y-2">
               <Label htmlFor="title" className="text-sm text-gray-dark">
                 Judul

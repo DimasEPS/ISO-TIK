@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom"
 import { SearchIcon, Plus, ChevronDown, Funnel, FilePen, Trash2 } from "lucide-react"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -69,15 +70,34 @@ export default function PertanyaanSoA() {
 
   const handleSubmitQuestion = useCallback(
     async (payload, questionId) => {
+      const trimmedPayload = {
+        category_id: payload?.category_id,
+        question_code: payload?.question_code?.trim(),
+        question_name: payload?.question_name?.trim(),
+        question: payload?.question?.trim(),
+      }
+
+      if (
+        !trimmedPayload.category_id ||
+        !trimmedPayload.question_code ||
+        !trimmedPayload.question_name ||
+        !trimmedPayload.question
+      ) {
+        toast.warning("Lengkapi seluruh data pertanyaan sebelum menyimpan.")
+        return
+      }
+
       try {
         if (questionId) {
-          await updateQuestion(questionId, payload)
+          await updateQuestion(questionId, trimmedPayload)
+          toast.success("Pertanyaan SoA berhasil diperbarui.")
         } else {
-          await createQuestion(payload)
+          await createQuestion(trimmedPayload)
+          toast.success("Pertanyaan SoA berhasil ditambahkan.")
         }
       } catch (submitError) {
         console.error("Gagal menyimpan pertanyaan SoA", submitError)
-        alert(submitError?.message ?? "Gagal menyimpan pertanyaan SoA")
+        toast.error(submitError?.message ?? "Gagal menyimpan pertanyaan SoA")
       }
     },
     [createQuestion, updateQuestion],
@@ -91,9 +111,10 @@ export default function PertanyaanSoA() {
       try {
         await deleteQuestionMutation(questionId)
         setDeleteQuestion(null)
+        toast.success("Pertanyaan SoA berhasil dihapus.")
       } catch (deleteError) {
         console.error("Gagal menghapus pertanyaan SoA", deleteError)
-        alert(deleteError?.message ?? "Gagal menghapus pertanyaan SoA")
+        toast.error(deleteError?.message ?? "Gagal menghapus pertanyaan SoA")
       }
     },
     [deleteQuestionMutation],

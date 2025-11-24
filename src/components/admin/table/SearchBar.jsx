@@ -10,7 +10,7 @@ export function SearchBar({
   value,
   onChange,
   className = "",
-  inputGroupClassName = "h-14 max-w-[1093px]",
+  inputGroupClassName = "h-14",
   inputClassName = "bg-state text-navy placeholder:text-gray-dark",
   icon,
   inputProps = {},

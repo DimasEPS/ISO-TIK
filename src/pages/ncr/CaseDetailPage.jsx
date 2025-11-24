@@ -25,6 +25,20 @@ const normalizePointType = (value) => {
   return POINT_TYPE_MAP[normalized] ?? normalized;
 };
 
+const getDocumentNumber = (caseInfo) => {
+  if (!caseInfo) return "-";
+  const candidates = [
+    caseInfo.document_number,
+    caseInfo.ncr_document?.document_number,
+    caseInfo.ncr_document?.ncr_number,
+    caseInfo.ncr_number,
+    caseInfo.case_number,
+    caseInfo.id,
+  ];
+  const found = candidates.find((value) => Boolean(value));
+  return found ? String(found) : "-";
+};
+
 const extractPointItems = (payload, expectedType) => {
   if (!payload) return [];
   const normalizedTarget = normalizePointType(expectedType);
@@ -66,12 +80,34 @@ const listToStrings = (items) =>
 
 const buildVerificationNotes = (caseInfo) => {
   if (!caseInfo) return [];
+
+  const verificationNotes =
+    caseInfo.verification_notes ||
+    caseInfo.verificationNotes ||
+    caseInfo.verification_note ||
+    caseInfo.verificationNote;
+  const verificationDate =
+    caseInfo.verification_date ||
+    caseInfo.verificationDate ||
+    caseInfo.verified_at ||
+    caseInfo.verifiedAt;
+  const completionDate = caseInfo.completion_date || caseInfo.completionDate;
+  const verifierRaw =
+    caseInfo.verifier_name ||
+    caseInfo.verifierName ||
+    caseInfo.verified_by ||
+    caseInfo.verifiedBy;
+  const verifierName =
+    typeof verifierRaw === "string" ? verifierRaw : verifierRaw?.name;
+
   const notes = [];
-  if (caseInfo.verification_note) notes.push(caseInfo.verification_note);
-  if (caseInfo.verification_date) {
-    notes.push(`Tanggal: ${formatDateValue(caseInfo.verification_date)}`);
+  if (verificationNotes) notes.push(verificationNotes);
+  if (completionDate) {
+    notes.push(`Tanggal Penyelesaian: ${formatDateValue(completionDate)}`);
   }
-  const verifierName = caseInfo.verifier_name || caseInfo.verified_by?.name;
+  if (verificationDate) {
+    notes.push(`Tanggal Verifikasi: ${formatDateValue(verificationDate)}`);
+  }
   if (verifierName) {
     notes.push(`Diverifikasi oleh: ${verifierName}`);
   }
@@ -81,9 +117,10 @@ const buildVerificationNotes = (caseInfo) => {
 const buildCasePdfPayload = (caseInfo, lists) => {
   if (!caseInfo) return null;
   const findingsText = listToStrings(lists.findings);
+  const documentNumber = getDocumentNumber(caseInfo);
 
   return {
-    ncrNumber: caseInfo.case_number || caseInfo.ncr_number || caseInfo.id,
+    ncrNumber: documentNumber,
     id: caseInfo.id,
     date: caseInfo.ncr_date || caseInfo.created_at,
     bagianLokasi: caseInfo.department_location || caseInfo.location || caseInfo.bagianTerkait,
@@ -140,12 +177,29 @@ export default function CaseDetailPage() {
 
   const caseDetail = useMemo(() => {
     if (!caseInfo) return null;
-    const verifierRaw = caseInfo.verified_by || caseInfo.verifiedBy;
+    const documentNumber = getDocumentNumber(caseInfo);
+    const verifierRaw =
+      caseInfo.verifier_name ||
+      caseInfo.verifierName ||
+      caseInfo.verified_by ||
+      caseInfo.verifiedBy;
     const verifierName =
       typeof verifierRaw === "string" ? verifierRaw : verifierRaw?.name || "-";
 
+    const completionDate = caseInfo.completion_date || caseInfo.completionDate;
+    const verificationDate =
+      caseInfo.verification_date ||
+      caseInfo.verificationDate ||
+      caseInfo.verified_at ||
+      caseInfo.verifiedAt;
+    const verificationNotes =
+      caseInfo.verification_notes ||
+      caseInfo.verificationNotes ||
+      caseInfo.verification_note ||
+      caseInfo.verificationNote;
+
     return {
-      id: caseInfo.case_number || caseInfo.id,
+      id: documentNumber,
       bagianTerkait: caseInfo.department_location || caseInfo.location || "-",
       tanggal: formatDateValue(caseInfo.created_at || caseInfo.ncr_date),
       standarReferensi: caseInfo.standard_reference || caseInfo.references_standard || "-",
@@ -154,8 +208,9 @@ export default function CaseDetailPage() {
       namaAuditee: caseInfo.auditee_name || caseInfo.auditee?.name || "-",
       status: caseInfo.status || "-",
       targetPerbaikan: formatDateValue(caseInfo.target_date),
-      verificationNote: caseInfo.verification_note || "-",
-      verificationDate: formatDateValue(caseInfo.verification_date),
+      verificationNotes: verificationNotes || "-",
+      verificationDate: formatDateValue(verificationDate),
+      completionDate: formatDateValue(completionDate),
       verifiedBy: verifierName,
     };
   }, [caseInfo]);
@@ -206,11 +261,15 @@ export default function CaseDetailPage() {
         catatanVerifikasi: "-",
       };
     }
+
     return {
       namaPemverifikasi: caseDetail.verifiedBy || "Belum ditentukan",
-      tanggalPemverifikasi: caseDetail.verificationDate || "-",
+      tanggalPemverifikasi: caseDetail.completionDate || "-",
       tanggalVerifikasi: caseDetail.verificationDate || "-",
-      catatanVerifikasi: caseDetail.verificationNote || "Belum ada catatan",
+      catatanVerifikasi:
+        caseDetail.verificationNotes && caseDetail.verificationNotes !== "-"
+          ? caseDetail.verificationNotes
+          : "Belum ada catatan",
     };
   }, [caseDetail]);
 
@@ -403,8 +462,10 @@ export default function CaseDetailPage() {
           {findings.length ? (
             <div className="space-y-2">
               {findings.map((finding, index) => (
-                <div key={finding.id || index} className="flex items-center gap-2">
-                  <span className="text-sm text-navy font-medium">{index + 1}.</span>
+                <div key={finding.id || index} className="flex items-start gap-2">
+                  <span className="text-sm text-navy font-medium min-w-5 text-right">
+                    {String(index + 1).padStart(2, "0")}.
+                  </span>
                   <p className="text-sm text-navy flex-1">{finding.deskripsi}</p>
                 </div>
               ))}
@@ -435,8 +496,10 @@ export default function CaseDetailPage() {
           {analyses.length ? (
             <div className="space-y-2">
               {analyses.map((analysis, index) => (
-                <div key={analysis.id || index} className="flex items-center gap-2">
-                  <span className="text-sm text-navy font-medium">{index + 1}.</span>
+                <div key={analysis.id || index} className="flex items-start gap-2">
+                  <span className="text-sm text-navy font-medium min-w-5 text-right">
+                    {String(index + 1).padStart(2, "0")}.
+                  </span>
                   <p className="text-sm text-navy flex-1">{analysis.deskripsi}</p>
                 </div>
               ))}
@@ -455,8 +518,10 @@ export default function CaseDetailPage() {
           {corrections.length ? (
             <div className="space-y-2">
               {corrections.map((correction, index) => (
-                <div key={correction.id || index} className="flex items-center gap-2">
-                  <span className="text-sm text-navy font-medium">{index + 1}.</span>
+                <div key={correction.id || index} className="flex items-start gap-2">
+                  <span className="text-sm text-navy font-medium min-w-5 text-right">
+                    {String(index + 1).padStart(2, "0")}.
+                  </span>
                   <p className="text-sm text-navy flex-1">{correction.deskripsi}</p>
                 </div>
               ))}
@@ -475,8 +540,10 @@ export default function CaseDetailPage() {
           {correctiveActions.length ? (
             <div className="space-y-2">
               {correctiveActions.map((action, index) => (
-                <div key={action.id || index} className="flex items-center gap-2">
-                  <span className="text-sm text-navy font-medium">{index + 1}.</span>
+                <div key={action.id || index} className="flex items-start gap-2">
+                  <span className="text-sm text-navy font-medium min-w-5 text-right">
+                    {String(index + 1).padStart(2, "0")}.
+                  </span>
                   <p className="text-sm text-navy flex-1">{action.deskripsi}</p>
                 </div>
               ))}
