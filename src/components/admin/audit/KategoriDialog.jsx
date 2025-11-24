@@ -5,7 +5,6 @@ import {
   Dialog,
   DialogClose,
   DialogContent,
-  DialogDescription,
   DialogFooter,
   DialogHeader,
   DialogTitle,
@@ -13,40 +12,65 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
+import { toast } from "sonner";
 
 // Add/Edit Dialog
 export function KategoriDialog({
   mode = "add",
   kategori = null,
+  aspectId,
   open,
   onOpenChange,
   onSave,
+  isSubmitting = false,
 }) {
   const [formData, setFormData] = useState({
     name: "",
-    description: "",
   });
+  const [internalOpen, setInternalOpen] = useState(false);
+
+  // For uncontrolled mode, use internal state
+  const isOpen = open !== undefined ? open : internalOpen;
+  const setIsOpen = onOpenChange || setInternalOpen;
 
   useEffect(() => {
     if (mode === "edit" && kategori) {
       setFormData({
         name: kategori.name || "",
-        description: kategori.description || "",
       });
     } else {
       setFormData({
         name: "",
-        description: "",
       });
     }
-  }, [mode, kategori, open]);
+  }, [mode, kategori, isOpen]);
 
-  const handleSubmit = (e) => {
+  const handleSubmit = async (e) => {
     e.preventDefault();
-    onSave?.(formData);
-    if (!open && onOpenChange) {
-      onOpenChange(false);
+
+    if (!aspectId) {
+      toast.error("Error", {
+        description: "Aspect ID tidak ditemukan",
+      });
+      return;
+    }
+
+    try {
+      await onSave?.({
+        ...formData,
+        aspectId: aspectId,
+      });
+
+      // Reset form and close dialog on success
+      setFormData({ name: "" });
+
+      // For uncontrolled mode (add), close the dialog
+      if (mode === "add") {
+        setIsOpen(false);
+      }
+    } catch (error) {
+      // Error handling sudah ada di hook
+      console.error("Submit error:", error);
     }
   };
 
@@ -78,37 +102,30 @@ export function KategoriDialog({
             placeholder="Masukkan nama kategori pertanyaan"
             className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy h-12"
             required
-          />
-        </div>
-        <div className="space-y-2">
-          <Label htmlFor="description" className="text-sm text-navy">
-            Deskripsi
-          </Label>
-          <Textarea
-            id="description"
-            value={formData.description}
-            onChange={(e) =>
-              setFormData((prev) => ({
-                ...prev,
-                description: e.target.value,
-              }))
-            }
-            placeholder="Masukkan deskripsi kategori..."
-            className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy min-h-[100px]"
-            required
+            disabled={isSubmitting}
           />
         </div>
         <DialogFooter className="gap-2 sm:gap-0">
           <DialogClose asChild>
-            <Button type="button" variant="outline" className="rounded-lg">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-lg"
+              disabled={isSubmitting}
+            >
               Batal
             </Button>
           </DialogClose>
           <Button
             type="submit"
             className="rounded-lg bg-navy hover:bg-navy-hover"
+            disabled={isSubmitting}
           >
-            {mode === "add" ? "Simpan Kategori Pertanyaan" : "Simpan Perubahan"}
+            {isSubmitting
+              ? "Menyimpan..."
+              : mode === "add"
+              ? "Simpan Kategori Pertanyaan"
+              : "Simpan Perubahan"}
           </Button>
         </DialogFooter>
       </form>
@@ -126,7 +143,7 @@ export function KategoriDialog({
 
   // Uncontrolled mode with trigger
   return (
-    <Dialog>
+    <Dialog open={isOpen} onOpenChange={setIsOpen}>
       <DialogTrigger asChild>
         <Button className="bg-navy hover:bg-navy-hover text-white rounded-lg h-[52px] gap-2">
           <Plus className="w-5 h-5" />
@@ -144,6 +161,7 @@ export function DeleteKategoriDialog({
   open,
   onOpenChange,
   onConfirm,
+  isDeleting = false,
 }) {
   const [inputValue, setInputValue] = useState("");
 
@@ -153,11 +171,17 @@ export function DeleteKategoriDialog({
     }
   }, [open]);
 
-  const handleDelete = (e) => {
+  const handleDelete = async (e) => {
     e.preventDefault();
     if (inputValue === kategori?.name) {
-      onConfirm?.();
-      onOpenChange?.(false);
+      try {
+        await onConfirm?.();
+        setInputValue("");
+        onOpenChange?.(false);
+      } catch (error) {
+        // Error handling sudah ada di hook
+        console.error("Delete error:", error);
+      }
     }
   };
 
@@ -207,6 +231,7 @@ export function DeleteKategoriDialog({
                 onChange={(e) => setInputValue(e.target.value)}
                 placeholder="Masukkan nama kategori"
                 className="rounded-lg bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy"
+                disabled={isDeleting}
               />
             </div>
 
@@ -217,16 +242,17 @@ export function DeleteKategoriDialog({
                   variant="outline"
                   className="rounded-lg"
                   onClick={() => setInputValue("")}
+                  disabled={isDeleting}
                 >
                   Batal
                 </Button>
               </DialogClose>
               <Button
                 type="submit"
-                disabled={!isValid}
+                disabled={!isValid || isDeleting}
                 className="rounded-lg bg-red-600 hover:bg-red-700 text-white disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                Hapus Kategori Pertanyaan
+                {isDeleting ? "Menghapus..." : "Hapus Kategori Pertanyaan"}
               </Button>
             </DialogFooter>
           </form>
