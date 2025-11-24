@@ -1,4 +1,5 @@
 import { useState, useMemo } from "react";
+import { toast } from "sonner";
 import { useNavigate, useParams } from "react-router-dom";
 import { usePageTemplate } from "@/hooks/usePageTemplate";
 import { Button } from "@/components/ui/button";
@@ -9,8 +10,8 @@ import {
   useNCRPoints, 
   useNCRCase,
   useCreateNCRPoint,
-  useUpdateNCRPoint,
-  useDeleteNCRPoint 
+  useDeleteNCRPoint,
+  useUpdateNCRCase,
 } from "./hooks/useNCRQueries";
 
 const POINT_TYPE_MAP = {
@@ -58,6 +59,29 @@ const extractPointItems = (payload, expectedType) => {
   return matched?.items ?? [];
 };
 
+const FINDING_CATEGORY_LABELS = {
+  minor: "Kategori Temuan Audit - Minor",
+  major: "Kategori Temuan Audit - Major",
+  critical: "Kategori Temuan Audit - Critical",
+};
+
+const getCategoryLabel = (value) => {
+  if (!value) return "Kategori Temuan";
+  const normalized = String(value).toLowerCase();
+  return FINDING_CATEGORY_LABELS[normalized] || value;
+};
+
+const getCategoryValue = (label) => {
+  if (!label) return null;
+  const entry = Object.entries(FINDING_CATEGORY_LABELS).find(([, text]) => text === label);
+  if (entry) return entry[0];
+  const normalized = label.toLowerCase();
+  if (FINDING_CATEGORY_LABELS[normalized]) {
+    return normalized;
+  }
+  return null;
+};
+
 export default function FindingsListPage() {
   usePageTemplate({
     title: "Non Conformity Report (NCR)",
@@ -93,8 +117,8 @@ export default function FindingsListPage() {
   });
 
   const createMutation = useCreateNCRPoint();
-  const updateMutation = useUpdateNCRPoint();
   const deleteMutation = useDeleteNCRPoint();
+  const updateCaseMutation = useUpdateNCRCase();
 
   const auditorId =
     caseInfo.auditor_uuid ??
@@ -117,15 +141,19 @@ export default function FindingsListPage() {
     };
   }, [caseInfo, documentTitle]);
 
+  const findingCategoryLabel = useMemo(() => {
+    return getCategoryLabel(caseInfo?.finding_category || caseInfo?.findingCategory);
+  }, [caseInfo]);
+
   const findings = useMemo(() => {
     const items = extractPointItems(findingsData, "finding");
     return items.map(f => ({
       id: f.id,
-      kategori: f.category || "Kategori Temuan",
+      kategori: f.category || findingCategoryLabel || "Kategori Temuan",
       deskripsi: f.description || f.deskripsi || "",
       description: f.description || f.deskripsi || "",
     }));
-  }, [findingsData]);
+  }, [findingsData, findingCategoryLabel]);
 
   const handleBack = () => {
     navigate(`/admin/ncr/${id}/kasus`);
@@ -133,7 +161,7 @@ export default function FindingsListPage() {
 
   const handleAddFinding = () => {
     if (!auditorId) {
-      alert("Data auditor kasus belum tersedia. Mohon muat ulang halaman atau perbarui data kasus terlebih dahulu.");
+      toast.error("Data auditor kasus belum tersedia. Muat ulang halaman atau perbarui data kasus terlebih dahulu.");
       return;
     }
     setIsAddModalOpen(true);
@@ -150,34 +178,41 @@ export default function FindingsListPage() {
         auditorId,
       });
       setIsAddModalOpen(false);
+      toast.success("Temuan berhasil ditambahkan.");
     } catch (error) {
       console.error("Gagal menambah temuan:", error);
+      toast.error(error?.message || "Gagal menambah temuan.");
     }
   };
 
   const handleEditCategory = () => {
-    // Open edit modal with the category (first finding's category as reference)
-    if (findings.length > 0) {
-      setSelectedFinding(findings[0]);
-      setIsEditModalOpen(true);
-    }
+    const referenceFinding = findings[0] || { kategori: findingCategoryLabel };
+    setSelectedFinding(referenceFinding);
+    setIsEditModalOpen(true);
   };
 
   const handleSaveEdit = async (updatedFinding) => {
-    if (!updatedFinding?.id) return;
+    const selectedLabel = updatedFinding?.kategori;
+    const categoryValue = getCategoryValue(selectedLabel);
+
+    if (!categoryValue) {
+      toast.error("Kategori temuan tidak valid. Silakan pilih kembali.");
+      return;
+    }
+
     try {
-      await updateMutation.mutateAsync({
-        pointId: updatedFinding.id,
+      await updateCaseMutation.mutateAsync({
+        caseId: caseId,
         payload: {
-          caseId: caseId,
-          category: updatedFinding.kategori,
-          description: updatedFinding.description || updatedFinding.deskripsi,
+          finding_category: categoryValue,
         },
       });
       setIsEditModalOpen(false);
       setSelectedFinding(null);
+      toast.success("Kategori temuan berhasil diperbarui.");
     } catch (error) {
-      console.error("Gagal mengupdate temuan:", error);
+      console.error("Gagal mengupdate kategori temuan:", error);
+      toast.error(error?.message || "Gagal mengupdate kategori temuan.");
     }
   };
 
@@ -195,8 +230,10 @@ export default function FindingsListPage() {
       });
       setIsDeleteModalOpen(false);
       setSelectedFinding(null);
+      toast.success("Temuan berhasil dihapus.");
     } catch (error) {
       console.error("Gagal menghapus temuan:", error);
+      toast.error(error?.message || "Gagal menghapus temuan.");
     }
   };
 
@@ -258,7 +295,7 @@ export default function FindingsListPage() {
           badge={
             <div className="bg-white border border-gray-300 rounded px-3 py-1 inline-block">
               <p className="text-sm text-gray-700">
-                {findings[0]?.kategori || "Kategori Temuan Audit - Minor"}
+                {findingCategoryLabel || "Kategori Temuan Audit - Minor"}
               </p>
             </div>
           }
@@ -271,7 +308,7 @@ export default function FindingsListPage() {
               label: "Edit Kategori Temuan",
               onClick: handleEditCategory,
               className: "bg-blue-600 text-white hover:bg-blue-700",
-              disabled: findings.length === 0 && !isLoading
+              disabled: isCaseLoading
             },
             {
               icon: Plus,

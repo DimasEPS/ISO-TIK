@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import { toast } from "sonner";
 import { useNavigate } from "react-router-dom";
 import { useAuth } from "@/auth/context/AuthContext";
 import { useLoginForm } from "@/auth/hooks/useLoginForm";
@@ -15,13 +16,16 @@ export default function LoginPage() {
     const result = await login(username, password);
     
     if (result.success) {
+      toast.success("Berhasil masuk. Selamat datang kembali!");
       navigate("/admin/dashboard");
     } else {
+      const fallbackError = result.error || "Username atau password salah";
       setErrors((prev) => ({
         ...prev,
         ...(result.fieldErrors || {}),
-        submit: result.error || "Username atau password salah",
+        submit: fallbackError,
       }));
+      toast.error(fallbackError);
     }
   };
 
