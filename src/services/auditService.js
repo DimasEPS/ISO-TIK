@@ -360,6 +360,36 @@ export const auditService = {
       params,
     }),
 
+  /**
+   * Create new audit excel question (admin only)
+   * @param {Object} data - { aspect, item_audit, id_audit_excel_checklists }
+   */
+  createExcelQuestion: (data) =>
+    apiClient("/admin/audit/excel-questions", {
+      method: "POST",
+      data: data,
+    }),
+
+  /**
+   * Update audit excel question (admin only)
+   * @param {string} questionId - UUID excel question
+   * @param {Object} data - { aspect, item_audit, id_audit_excel_checklists }
+   */
+  updateExcelQuestion: (questionId, data) =>
+    apiClient(`/admin/audit/excel-questions/${questionId}`, {
+      method: "PUT",
+      data: data,
+    }),
+
+  /**
+   * Delete audit excel question (admin only)
+   * @param {string} questionId - UUID excel question
+   */
+  deleteExcelQuestion: (questionId) =>
+    apiClient(`/admin/audit/excel-questions/${questionId}`, {
+      method: "DELETE",
+    }),
+
   // ========== AUDIT ANSWERS ==========
   /**
    * Get detail audit answer by ID

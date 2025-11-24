@@ -164,8 +164,7 @@ export default function KategoriPertanyaan() {
     );
   };
 
-  const handleViewPertanyaan = (kategori) => {
-    console.log("View pertanyaan for kategori:", kategori);
+  const handleViewPertanyaan = () => {
     // Navigate to pertanyaan detail page
   };
 
