@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { toast } from "sonner";
 import { usePageTemplate } from "@/hooks/usePageTemplate";
 import { useAuth } from "@/auth/context/AuthContext";
 import {
@@ -264,7 +265,7 @@ export default function Profil() {
       }
       
       closeProfileModal();
-      alert("Profil berhasil diperbarui!");
+      toast.success("Profil berhasil diperbarui!");
       return { success: true };
     } catch (error) {
       console.error("=== Profile Update Error ===");
@@ -281,6 +282,9 @@ export default function Profil() {
         mappedErrors.submit = fallbackMessage;
       }
       setProfileFieldErrors(mappedErrors);
+      if (fallbackMessage) {
+        toast.error(fallbackMessage);
+      }
       return {
         success: false,
         errorMessage: fallbackMessage,
@@ -321,7 +325,7 @@ export default function Profil() {
       });
       
       closeAccountModal();
-      alert("Akun berhasil diperbarui!");
+      toast.success("Akun berhasil diperbarui!");
       return { success: true };
     } catch (error) {
       const backendErrors = error?.data?.errors || {};
@@ -332,6 +336,9 @@ export default function Profil() {
         mappedErrors.submit = fallbackMessage;
       }
       setAccountFieldErrors(mappedErrors);
+      if (fallbackMessage) {
+        toast.error(fallbackMessage);
+      }
       return {
         success: false,
         errorMessage: fallbackMessage,
@@ -359,7 +366,7 @@ export default function Profil() {
         },
       });
       closePasswordModal();
-      alert("Kata sandi berhasil diubah!");
+      toast.success("Kata sandi berhasil diubah!");
       return { success: true };
     } catch (error) {
       const backendErrors = error?.data?.errors || {};
@@ -370,6 +377,9 @@ export default function Profil() {
         mappedErrors.submit = fallbackMessage;
       }
       setPasswordFieldErrors(mappedErrors);
+      if (fallbackMessage) {
+        toast.error(fallbackMessage);
+      }
       return {
         success: false,
         errorMessage: fallbackMessage,

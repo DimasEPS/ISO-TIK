@@ -9,6 +9,7 @@ const unwrapListPayload = (response) => ({
 })
 
 const normalizeDocumentPayload = (payload = {}) => ({
+  document_number: payload.documentNumber?.trim() || payload.document_number?.trim() || null,
   title: payload.title?.trim(),
   description: payload.description?.trim() || null,
 })
@@ -44,6 +45,14 @@ export const ncrDocumentsService = {
     const response = await apiClient(`/admin/ncr-documents/${documentId}`, {
       method: "DELETE",
     })
+    return unwrapData(response)
+  },
+
+  /**
+   * Get document with all cases and their complete data for PDF generation
+   */
+  getDocumentWithAllCasesForPDF: async (documentId) => {
+    const response = await apiClient(`/ncr-documents/${documentId}/cases/complete`)
     return unwrapData(response)
   },
 }
