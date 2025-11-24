@@ -29,8 +29,7 @@ export function DocumentDeleteDialog({
     return caseSensitive ? workingValue : workingValue.toLowerCase()
   }
 
-  const referenceText = documentData?.noDoc ?? documentData?.judul ?? "-"
-  const confirmationLabel = documentData?.judul ?? ""
+  const confirmationLabel = documentData?.judul ?? documentData?.noDoc ?? ""
 
   const handleConfirm = () => {
     if (!confirmationLabel) return
@@ -68,7 +67,7 @@ export function DocumentDeleteDialog({
           </p>
           <input
             readOnly
-            value={referenceText}
+            value={confirmationLabel || "-"}
             className="h-11 w-full rounded-lg border border-transparent bg-[#F5F7FB] px-4 text-navy"
           />
           <input

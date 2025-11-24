@@ -1,8 +1,10 @@
-import { useMemo, useState } from "react"
-import { Link, useSearchParams } from "react-router-dom"
-import { List, Rows3, Eye, ChevronDown, ChevronRight, Check, X } from "lucide-react"
+import { useCallback, useEffect, useMemo, useState } from "react"
+import { Link, useNavigate, useSearchParams } from "react-router-dom"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
+import { List, Rows3, ChevronDown, ChevronRight, Check, X, Loader2 } from "lucide-react"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -10,64 +12,504 @@ import {
   DropdownMenuLabel,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
-import { SearchBar, StatusDropdown } from "@/components/admin/table"
-import { useReviewSoA } from "./hooks/useReviewSoA"
 import {
-  getReviewMetaByTitle,
-  reviewControlMatrix,
-  reviewRelatedDocuments,
-  reviewNavigatorConfig,
-} from "@/mocks/reviewSoAData"
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import { SearchBar, StatusDropdown } from "@/components/admin/table"
 import { ScaleTable } from "@/components/scaleTable"
-import { scaleTableData } from "@/mocks/scaleTable"
+import { downloadSoAReviewPDF } from "@/generatePDF/generators"
+import { documentsService } from "@/services/documentsService"
+import { soaAnswersService } from "@/services/soaAnswersService"
+import { useReviewSoA } from "./hooks/useReviewSoA"
 
-const CATEGORY_OPTIONS = reviewNavigatorConfig.map((section) => ({
-  label: `${section.title}`,
-  value: section.code,
-}))
+const CONTROL_METRICS = [
+  {
+    field: "pl",
+    code: "PL",
+    label: "Persyaratan Legal",
+    description: "Kewajiban hukum dan regulasi yang berlaku untuk unit ini.",
+  },
+  {
+    field: "kk",
+    code: "KK",
+    label: "Kewajiban Kontrak",
+    description: "Perjanjian kontrak dengan pihak ketiga penyedia layanan.",
+  },
+  {
+    field: "pk_pb",
+    code: "PK/PB",
+    label: "Persyaratan Kerja / Praktik yang Baik",
+    description: "Standar prosedur operasional terbaik yang ditetapkan manajemen.",
+  },
+  {
+    field: "hpr",
+    code: "HPR",
+    label: "Hasil Penilaian Risiko (Keamanan Informasi)",
+    description: "Mitigasi berdasarkan hasil analisis risiko keamanan informasi.",
+  },
+]
+
+const CONTROL_VALUE_OPTIONS = [
+  { value: "yes", label: "Yes" },
+  { value: "no", label: "No" },
+  { value: "partial", label: "Partial" },
+]
+
+const CONTROL_VALUE_LABELS = CONTROL_VALUE_OPTIONS.reduce(
+  (map, option) => ({ ...map, [option.value]: option.label }),
+  {},
+)
+
+const getControlValueLabel = (value) => {
+  if (!value) return undefined
+  const normalized = String(value).toLowerCase()
+  return CONTROL_VALUE_LABELS[normalized]
+}
+
+const CONTROL_CODES = CONTROL_METRICS.map((metric) => metric.code)
 
 const VIEW_MODE_OPTIONS = [
-  { value: "detail", label: "Pengisian Jawaban", icon: List, url: "/admin/soa/pengisian" },
-  { value: "table", label: "Tampilan Table", icon: Rows3, url: "/admin/soa/pengisian/table" },
+  { value: "detail", label: "Pengisian Jawaban", icon: List },
+  { value: "table", label: "Tampilan Tabel", icon: Rows3 },
 ]
-const TABLE_CATEGORY_OPTIONS = [
-  { value: "Semua Kategori" },
-  ...reviewNavigatorConfig.map((section) => ({ value: section.code  })),
-]
+
+const currentControlToLabel = (value) => {
+  if (value === "yes") return "Y"
+  if (value === "no") return "T"
+  if (value === "partial") return "S"
+  return "-"
+}
+
+const splitSummaryText = (text) => {
+  if (!text) return []
+  return text
+    .split(/\n+/)
+    .map((line) => line.trim())
+    .filter(Boolean)
+}
+
+const getStatusBadge = (answer) => {
+  if (!answer) {
+    return {
+      label: "Belum Dijawab",
+      className: "bg-gray-100 text-gray-500 border border-gray-200",
+    }
+  }
+
+  if (answer.is_review) {
+    return {
+      label: "Sudah Ditinjau",
+      className: "bg-green-light text-green border border-green/30",
+    }
+  }
+
+  return {
+    label: "Draft",
+    className: "bg-yellow-light text-yellow border border-yellow/40",
+  }
+}
+
+const mapAnswerDetailResponse = (response) => {
+  const data = response?.data ?? response
+  if (!data) return null
+
+  const documents = (data.soa_answer_documents ?? []).map((item) => ({
+    id: item.document?.id ?? item.id_documents,
+    code: item.document?.code ?? item.document_code ?? item.document?.document_code ?? "-",
+    title: item.document?.name ?? item.document_name ?? "-",
+    description: item.document?.description ?? "-",
+  }))
+
+  return {
+    id: data.id,
+    questionId: data.question?.id ?? null,
+    current_control: data.current_control ?? "no",
+    pl: data.pl ?? "",
+    kk: data.kk ?? "",
+    pk_pb: data.pk_pb ?? "",
+    hpr: data.hpr ?? "",
+    justification: data.justification ?? "",
+    implementation_summary: data.implementation_summary ?? "",
+    reviewer_comment: data.reviewer_comment ?? "",
+    documents,
+  }
+}
+
+const buildInitialFormState = ({ detail, questionId, documentId } = {}) => ({
+  current_control: detail?.current_control ?? "no",
+  pl: detail?.pl ?? "",
+  kk: detail?.kk ?? "",
+  pk_pb: detail?.pk_pb ?? "",
+  hpr: detail?.hpr ?? "",
+  justification: detail?.justification ?? "",
+  implementation_summary: detail?.implementation_summary ?? "",
+  id_soa_questions: questionId ?? detail?.questionId ?? null,
+  id_soa_documents: documentId ?? null,
+  document_ids: detail?.documents?.map((doc) => doc.id) ?? [],
+})
+
+const buildInitialDocuments = (detail) => detail?.documents ?? []
+
+const buildQuestionRow = (question, summary, detail) => {
+  const badge = getStatusBadge(summary)
+
+  return {
+    id: question.code || question.id,
+    title: question.title,
+    description: question.description,
+    yts: currentControlToLabel(summary?.current_control),
+    controls: {
+      PL: getControlValueLabel(summary?.pl) ?? "-",
+      KK: getControlValueLabel(summary?.kk) ?? "-",
+      "PK/PB": getControlValueLabel(summary?.pk_pb) ?? "-",
+      HPR: getControlValueLabel(summary?.hpr) ?? "-",
+    },
+    justification: summary?.justification || "-",
+    summary: splitSummaryText(summary?.implementation_summary),
+    documents: detail?.documents ?? [],
+    statusLabel: badge.label,
+    statusClass: badge.className,
+    reviewerComment: summary?.reviewer_comment || "-",
+  }
+}
+
+const buildSectionsFromCache = (categories, answersByQuestion, queryClient) => {
+  if (!categories?.length) return []
+  return categories.map((category) => ({
+    code: category.code,
+    title: category.title,
+    questions: (category.questions ?? []).map((question) => {
+      const summary = answersByQuestion.get(question.id)
+      const cachedDetail =
+        summary?.id && queryClient.getQueryData(["soa-answers", "detail", summary.id])
+          ? mapAnswerDetailResponse(queryClient.getQueryData(["soa-answers", "detail", summary.id]))
+          : null
+
+      return buildQuestionRow(question, summary, cachedDetail)
+    }),
+  }))
+}
+
+const buildSectionsWithFetch = async (categories, answersByQuestion, queryClient) => {
+  const sections = []
+  for (const category of categories) {
+    const rows = []
+    for (const question of category.questions ?? []) {
+      const summary = answersByQuestion.get(question.id)
+      let detail = null
+
+      if (summary?.id) {
+        const cached = queryClient.getQueryData(["soa-answers", "detail", summary.id])
+        if (cached) {
+          detail = mapAnswerDetailResponse(cached)
+        } else {
+          const response = await queryClient.fetchQuery({
+            queryKey: ["soa-answers", "detail", summary.id],
+            queryFn: () => soaAnswersService.getAnswer(summary.id),
+          })
+          detail = mapAnswerDetailResponse(response)
+        }
+      }
+
+      rows.push(buildQuestionRow(question, summary, detail))
+    }
+    sections.push({
+      code: category.code,
+      title: category.title,
+      questions: rows,
+    })
+  }
+  return sections
+}
+
+const mapDocumentOption = (item = {}) => ({
+  id: item.id,
+  code: item.document_code ?? item.document_number ?? item.noDoc ?? "-",
+  title: item.document_name ?? item.documentName ?? item.title ?? "-",
+  description: item.description ?? "-",
+})
+
+const useDebouncedValue = (value, delay = 300) => {
+  const [debounced, setDebounced] = useState(value)
+  useEffect(() => {
+    const timer = setTimeout(() => setDebounced(value), delay)
+    return () => clearTimeout(timer)
+  }, [value, delay])
+  return debounced
+}
 
 export default function ReviewJawabanSoA() {
-  const controls = useMemo(() => reviewControlMatrix, [])
-  const documentMeta = useMemo(() => getReviewMetaByTitle("SOA ISO 27001:2022 - Q1 2025"), [])
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
+  const [searchParams] = useSearchParams()
+  const documentId = searchParams.get("documentId")
+  const isViewOnlyMode = searchParams.get("mode") === "view"
+
+  const {
+    categories,
+    categoriesLoading,
+    categoriesError,
+    document,
+    documentLoading,
+    documentError,
+    answersByQuestion,
+    answersLoading,
+    answersError,
+    saveAnswer,
+    isSavingAnswer,
+  } = useReviewSoA({ documentId })
+
   const [viewMode, setViewMode] = useState(VIEW_MODE_OPTIONS[0].value)
-  const [selectedCategory, setSelectedCategory] = useState(reviewNavigatorConfig[0]?.code ?? "")
-  const selectedCategoryData = useMemo(
-    () => reviewNavigatorConfig.find((cat) => cat.code === selectedCategory),
-    [selectedCategory],
+  const isTableMode = viewMode === "table"
+
+  const categoryOptions = useMemo(
+    () =>
+      categories.map((category) => ({
+        value: category.code,
+        label: category.title,
+      })),
+    [categories],
   )
-  const [selectedQuestion, setSelectedQuestion] = useState(selectedCategoryData?.questions[0]?.id ?? "")
-  useMemo(() => {
-    setSelectedQuestion(selectedCategoryData?.questions[0]?.id ?? "")
-  }, [selectedCategory, selectedCategoryData])
+
+  const [selectedCategory, setSelectedCategory] = useState(categoryOptions[0]?.value ?? "")
+  useEffect(() => {
+    if (!categoryOptions.length) return
+    setSelectedCategory((prev) => {
+      if (categoryOptions.some((option) => option.value === prev)) return prev
+      return categoryOptions[0]?.value ?? ""
+    })
+  }, [categoryOptions])
+
+  const selectedCategoryData = useMemo(
+    () => categories.find((category) => category.code === selectedCategory) ?? categories[0],
+    [categories, selectedCategory],
+  )
+
+  const [selectedQuestion, setSelectedQuestion] = useState(selectedCategoryData?.questions?.[0]?.id ?? "")
+  useEffect(() => {
+    if (!selectedCategoryData) return
+    setSelectedQuestion((prev) => {
+      if (selectedCategoryData.questions?.some((question) => question.id === prev)) return prev
+      return selectedCategoryData.questions?.[0]?.id ?? ""
+    })
+  }, [selectedCategoryData])
 
   const currentQuestion = useMemo(
-    () =>
-      selectedCategoryData?.questions.find((q) => q.id === selectedQuestion) ??
-      selectedCategoryData?.questions[0],
-    [selectedQuestion, selectedCategoryData],
+    () => selectedCategoryData?.questions?.find((question) => question.id === selectedQuestion) ?? null,
+    [selectedCategoryData, selectedQuestion],
   )
 
-  const { controlState, setControlState, comment, setComment } = useReviewSoA({
-    defaultControlState: "no",
+  const orderedQuestions = useMemo(() => {
+    const entries = []
+    categories.forEach((category) => {
+      category.questions?.forEach((question) => {
+        entries.push({ categoryCode: category.code, question })
+      })
+    })
+    return entries
+  }, [categories])
+
+  const activeAnswerSummary = currentQuestion ? answersByQuestion.get(currentQuestion.id) : null
+  const activeAnswerId = activeAnswerSummary?.id ?? null
+
+  const answerDetailQuery = useQuery({
+    queryKey: ["soa-answers", "detail", activeAnswerId],
+    enabled: Boolean(activeAnswerId),
+    queryFn: () => soaAnswersService.getAnswer(activeAnswerId),
   })
 
-  const isTableMode = viewMode === "table"
-  const [searchParams] = useSearchParams()
-  const isViewOnlyMode = searchParams.get("mode") === "view"
+  const answerDetail = useMemo(
+    () => mapAnswerDetailResponse(answerDetailQuery.data),
+    [answerDetailQuery.data],
+  )
+
+  const [formState, setFormState] = useState(() =>
+    buildInitialFormState({ detail: answerDetail, questionId: currentQuestion?.id, documentId }),
+  )
+  const [selectedDocuments, setSelectedDocuments] = useState(() => buildInitialDocuments(answerDetail))
+  const [isDocumentPickerOpen, setIsDocumentPickerOpen] = useState(false)
+  const [isExporting, setIsExporting] = useState(false)
+
+  useEffect(() => {
+    setFormState(buildInitialFormState({ detail: answerDetail, questionId: currentQuestion?.id, documentId }))
+    setSelectedDocuments(buildInitialDocuments(answerDetail))
+  }, [answerDetail?.id, currentQuestion?.id, documentId])
+
+  useEffect(() => {
+    setFormState((prev) => ({
+      ...prev,
+      document_ids: selectedDocuments.map((doc) => doc.id),
+    }))
+  }, [selectedDocuments])
+
+  const handleCurrentControlChange = useCallback((value) => {
+    setFormState((prev) => ({ ...prev, current_control: value }))
+  }, [])
+
+  const handleMetricChange = useCallback((field, value) => {
+    setFormState((prev) => ({ ...prev, [field]: value }))
+  }, [])
+
+  const handleFieldChange = useCallback((field, value) => {
+    setFormState((prev) => ({ ...prev, [field]: value }))
+  }, [])
+
+  const handleSaveAnswer = useCallback(async () => {
+    if (isViewOnlyMode) return
+    if (!documentId || !currentQuestion) {
+      window.alert("Pilih dokumen dan pertanyaan terlebih dahulu.")
+      return
+    }
+
+    try {
+      await saveAnswer({
+        answerId: activeAnswerSummary?.id,
+        payload: {
+          ...formState,
+          id_soa_documents: documentId,
+          id_soa_questions: currentQuestion.id,
+        },
+      })
+      window.alert("Jawaban berhasil disimpan.")
+    } catch (error) {
+      console.error("Gagal menyimpan jawaban SoA", error)
+      window.alert(error?.message ?? "Gagal menyimpan jawaban SoA.")
+    }
+  }, [activeAnswerSummary?.id, currentQuestion, documentId, formState, isViewOnlyMode, saveAnswer])
+
+  const handleRemoveDocument = useCallback((documentIdToRemove) => {
+    setSelectedDocuments((prev) => prev.filter((doc) => doc.id !== documentIdToRemove))
+  }, [])
+
+  const handleDocumentsConfirm = useCallback((documents) => {
+    setSelectedDocuments(documents)
+    setIsDocumentPickerOpen(false)
+  }, [])
+
+  const [tableDetailVersion, setTableDetailVersion] = useState(0)
+
+  useEffect(() => {
+    if (!isTableMode) return
+    let cancelled = false
+    const fetchDetails = async () => {
+      await Promise.all(
+        Array.from(answersByQuestion.values()).map((answer) => {
+          if (!answer?.id) return Promise.resolve()
+          return queryClient.prefetchQuery({
+            queryKey: ["soa-answers", "detail", answer.id],
+            queryFn: () => soaAnswersService.getAnswer(answer.id),
+          })
+        }),
+      )
+      if (!cancelled) {
+        setTableDetailVersion((prev) => prev + 1)
+      }
+    }
+    fetchDetails()
+    return () => {
+      cancelled = true
+    }
+  }, [answersByQuestion, isTableMode, queryClient])
+
+  const tableSections = useMemo(
+    () => buildSectionsFromCache(categories, answersByQuestion, queryClient),
+    [categories, answersByQuestion, queryClient, tableDetailVersion],
+  )
+
   const [tableSearch, setTableSearch] = useState("")
-  const [tableCategory, setTableCategory] = useState(TABLE_CATEGORY_OPTIONS[0].value)
+  const [tableCategory, setTableCategory] = useState("Semua Kategori")
   const [isTableStatusOpen, setIsTableStatusOpen] = useState(false)
-  const viewModeControl = <ViewModeDropdown viewMode={viewMode} onViewModeChange={setViewMode} />
-  const viewModeCard = <div className="w-full max-w-[365px]">{viewModeControl}</div>
+
+  const tableCategoryOptions = useMemo(
+    () => [{ value: "Semua Kategori" }, ...categories.map((category) => ({ value: category.code }))],
+    [categories],
+  )
+
+  const handlePrevQuestion = useCallback(() => {
+    const activeIndex = orderedQuestions.findIndex((entry) => entry.question.id === selectedQuestion)
+    if (activeIndex <= 0) return
+    const target = orderedQuestions[activeIndex - 1]
+    setSelectedCategory(target.categoryCode)
+    setSelectedQuestion(target.question.id)
+  }, [orderedQuestions, selectedQuestion])
+
+  const handleNextQuestion = useCallback(() => {
+    const activeIndex = orderedQuestions.findIndex((entry) => entry.question.id === selectedQuestion)
+    if (activeIndex === -1 || activeIndex === orderedQuestions.length - 1) return
+    const target = orderedQuestions[activeIndex + 1]
+    setSelectedCategory(target.categoryCode)
+    setSelectedQuestion(target.question.id)
+  }, [orderedQuestions, selectedQuestion])
+
+  const handleDownloadPdf = useCallback(async () => {
+    if (!document) {
+      window.alert("Dokumen SoA belum dipilih.")
+      return
+    }
+
+    setIsExporting(true)
+    try {
+      const sections = await buildSectionsWithFetch(categories, answersByQuestion, queryClient)
+      await downloadSoAReviewPDF(document, {
+        sections,
+        controlCodes: CONTROL_CODES,
+        filename: `review-soa-${(document.noDoc || document.judul || "dokumen").replace(/\s+/g, "-").toLowerCase()}.pdf`,
+      })
+    } catch (error) {
+      console.error("Gagal membuat PDF jawaban SoA", error)
+      window.alert(error?.message ?? "Gagal membuat PDF jawaban SoA.")
+    } finally {
+      setIsExporting(false)
+    }
+  }, [answersByQuestion, categories, document, queryClient])
+
+  const viewModeControl = (
+    <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-end">
+      <Button
+        variant="outline"
+        className="w-full md:w-auto"
+        onClick={handleDownloadPdf}
+        disabled={!document || isExporting}
+      >
+        {isExporting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : null}
+        Unduh PDF
+      </Button>
+      <ViewModeDropdown viewMode={viewMode} onViewModeChange={setViewMode} />
+    </div>
+  )
+
+  if (!documentId) {
+    return (
+      <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-10 text-center text-gray-600">
+        <p className="body-medium text-navy mb-2">Pilih dokumen SoA terlebih dahulu.</p>
+        <p className="mb-4 text-sm text-gray-500">
+          Silakan buka daftar Dokumen SoA, pilih salah satu dokumen, lalu klik tombol “Isi Jawaban”.
+        </p>
+        <Button onClick={() => navigate("/admin/soa/dokumen")}>Kembali ke Dokumen SoA</Button>
+      </div>
+    )
+  }
+
+  if (documentLoading || categoriesLoading || answersLoading) {
+    return (
+      <div className="rounded-2xl border border-gray-200 bg-white p-10 text-center text-gray-500">
+        Memuat data pengisian SoA...
+      </div>
+    )
+  }
+
+  if (documentError || categoriesError || answersError) {
+    return (
+      <div className="rounded-2xl border border-red-200 bg-red-50 p-8 text-center text-red">
+        {documentError?.message || categoriesError?.message || answersError?.message || "Gagal memuat data SoA"}
+      </div>
+    )
+  }
 
   return (
     <div>
@@ -79,13 +521,14 @@ export default function ReviewJawabanSoA() {
         <div className={`flex h-full flex-col overflow-hidden ${isTableMode ? "" : "border-r border-navy-hover"}`}>
           <div className="shrink-0 pb-2 lg:pb-4 lg:pr-4">
             <PageHeader
-              documentMeta={documentMeta}
+              documentMeta={document}
+              categoryOptions={categoryOptions}
               selectedCategory={selectedCategory}
-              categoryOptions={CATEGORY_OPTIONS}
-              viewModeControl={isTableMode ? viewModeControl : null}
+              viewModeControl={viewModeControl}
             />
           </div>
-          {viewMode === "table" ? (
+
+          {isTableMode ? (
             <div className="flex-1 min-h-0 pb-4 space-y-4 px-2">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
                 <SearchBar
@@ -99,27 +542,41 @@ export default function ReviewJawabanSoA() {
                   setIsMenuOpen={setIsTableStatusOpen}
                   value={tableCategory}
                   onChange={setTableCategory}
-                  options={TABLE_CATEGORY_OPTIONS}
+                  options={tableCategoryOptions}
                   classNameButton="h-[56px] w-[219px]"
                   classNameDropdown="w-[219px]"
                 />
               </div>
               <LegendBar />
-              <ScaleTable data={scaleTableData} search={tableSearch} categoryFilter={tableCategory} />
+              <ScaleTable
+                data={{ controlCodes: CONTROL_CODES, sections: tableSections }}
+                search={tableSearch}
+                categoryFilter={tableCategory}
+              />
             </div>
           ) : (
             <ScrollArea className="flex-1 min-h-0 pr-1 lg:pr-4">
               <div className="space-y-6 pb-4">
                 <QuestionCard
                   question={currentQuestion}
-                  controls={controls}
-                  controlState={controlState}
-                  setControlState={setControlState}
+                  controlMetrics={CONTROL_METRICS}
+                  formState={formState}
+                  onCurrentControlChange={handleCurrentControlChange}
+                  onMetricChange={handleMetricChange}
+                  onFieldChange={handleFieldChange}
+                  selectedDocuments={selectedDocuments}
+                  onOpenDocumentPicker={() => setIsDocumentPickerOpen(true)}
+                  onRemoveDocument={handleRemoveDocument}
                   readOnly={isViewOnlyMode}
                 />
-                <RelatedDocs docs={reviewRelatedDocuments} readOnly={isViewOnlyMode} />
-                <CommentCard comment={comment} setComment={setComment} />
-                <ActionBar readOnly={isViewOnlyMode} />
+                <CommentCard reviewerComment={activeAnswerSummary?.reviewer_comment} />
+                <ActionBar
+                  readOnly={isViewOnlyMode}
+                  onSave={handleSaveAnswer}
+                  onPrevQuestion={handlePrevQuestion}
+                  onNextQuestion={handleNextQuestion}
+                  isSaving={isSavingAnswer}
+                />
               </div>
             </ScrollArea>
           )}
@@ -127,33 +584,36 @@ export default function ReviewJawabanSoA() {
 
         {!isTableMode && (
           <aside className="space-y-4 overflow-y-auto lg:sticky lg:top-[88px] lg:max-h-[calc(100vh-120px)] lg:overflow-y-auto ">
-            {viewModeCard}
-            <div className="space-y-4">
-              <LegendCard documentMeta={documentMeta} />
-              <Navigator
-                sections={reviewNavigatorConfig}
-                selectedCategory={selectedCategory}
-                onCategoryChange={setSelectedCategory}
-                selectedQuestion={selectedQuestion}
-                onQuestionChange={setSelectedQuestion}
-              />
-            </div>
+            <LegendCard activeCategoryCode={selectedCategory} />
+            <Navigator
+              sections={categories}
+              selectedCategory={selectedCategory}
+              onCategoryChange={setSelectedCategory}
+              selectedQuestion={selectedQuestion}
+              onQuestionChange={setSelectedQuestion}
+              answersByQuestion={answersByQuestion}
+            />
           </aside>
         )}
       </div>
+
+      <DocumentPickerDialog
+        open={isDocumentPickerOpen}
+        onOpenChange={setIsDocumentPickerOpen}
+        selectedDocuments={selectedDocuments}
+        onConfirm={handleDocumentsConfirm}
+      />
     </div>
   )
 }
 
-function PageHeader({ documentMeta, selectedCategory, categoryOptions, viewModeControl }) {
-  const categoryLabel = categoryOptions.find((opt) => opt.value === selectedCategory)?.label || ""
+function PageHeader({ documentMeta, categoryOptions, selectedCategory, viewModeControl }) {
+  const categoryLabel = categoryOptions.find((option) => option.value === selectedCategory)?.label ?? "-"
 
   return (
     <section>
       <div className="relative space-y-5 py-4">
-        {viewModeControl && (
-          <div className="w-full max-w-[365px] sm:w-auto lg:absolute lg:right-0 lg:top-0">{viewModeControl}</div>
-        )}
+        <div className="w-full">{viewModeControl}</div>
         <div className="flex flex-wrap items-center gap-2 text-sm">
           <Link to={`/admin/soa/dokumen`} className="small text-gray-dark hover:text-blue-dark">
             Dokumen SOA
@@ -168,12 +628,15 @@ function PageHeader({ documentMeta, selectedCategory, categoryOptions, viewModeC
             <div className="space-y-1 grid grid-cols-2">
               <div>
                 <p className="small text-gray-dark mb-3">Judul Dokumen</p>
-                <p className="heading-4 text-blue-dark">{documentMeta.title}</p>
+                <p className="heading-4 text-blue-dark">{documentMeta?.judul ?? "-"}</p>
+                <p className="text-sm text-gray-500 mt-1">No Dokumen: {documentMeta?.noDoc ?? "-"}</p>
               </div>
               <div>
-                <p className="small text-gray-dark mb-3">Kategori SoA</p>
+                <p className="small text-gray-dark mb-3">Kategori SoA Aktif</p>
                 <p className="heading-4 text-blue-dark">
-                  <span className="text-gray-light bg-blue-dark px-2 py-1 rounded body-medium mr-4">{selectedCategory}</span>
+                  <span className="text-gray-light bg-blue-dark px-2 py-1 rounded body-medium mr-4">
+                    {selectedCategory || "-"}
+                  </span>
                   {categoryLabel}
                 </p>
               </div>
@@ -185,25 +648,18 @@ function PageHeader({ documentMeta, selectedCategory, categoryOptions, viewModeC
   )
 }
 
-function QuestionCard({ question, controls, controlState, setControlState, readOnly }) {
-  const [formData, setFormData] = useState({
-    justification: "",
-    summary: "",
-  })
-
-  const CONTROL_COLUMNS = [
-    { label: "Ya", value: "yes", width: 43 },
-    { label: "Tidak", value: "no", width: 67 },
-    { label: "Sebagian", value: "partial", width: 96 },
-  ]
-
-  const CONTROL_TABLE_DIMENSIONS = {
-    width: 566,
-    headerHeight: 43,
-    rowHeight: 34,
-    firstColumnWidth: 360,
-  }
-
+function QuestionCard({
+  question,
+  controlMetrics,
+  formState,
+  onCurrentControlChange,
+  onMetricChange,
+  onFieldChange,
+  selectedDocuments,
+  onOpenDocumentPicker,
+  onRemoveDocument,
+  readOnly,
+}) {
   if (!question) {
     return (
       <section className="rounded-2xl border border-[#DDE3F5] bg-white p-6 shadow-sm">
@@ -216,13 +672,13 @@ function QuestionCard({ question, controls, controlState, setControlState, readO
     <section className="rounded-2xl shadow-sm space-y-8">
       <div className="space-y-3">
         <div className="flex flex-wrap items-center gap-3">
-          <span className="rounded bg-blue-dark px-2 py-1 small-medium text-gray-light">{question.id}</span>
-          <p className="body-bold text-navy">{question.label}</p>
+          <span className="rounded bg-blue-dark px-2 py-1 small-medium text-gray-light">{question.code || question.id}</span>
+          <p className="body-bold text-navy">{question.title}</p>
         </div>
         <p className="text-navy-hover leading-relaxed body">{question.description}</p>
       </div>
 
-      <div className="grid gap-6 lg:grid-cols-[150px_minmax(0,1fr)]">
+      <div className="grid gap-6 lg:grid-cols-[180px_minmax(0,1fr)]">
         <div className="space-y-3">
           <p className="body-medium text-navy">Kendali Saat Ini</p>
           <div className="flex flex-col gap-4 body">
@@ -237,11 +693,11 @@ function QuestionCard({ question, controls, controlState, setControlState, readO
                   className="accent-navy"
                   name="control-state"
                   value={option.value}
-                  checked={controlState === option.value}
-                  onChange={(event) => setControlState(event.target.value)}
+                  checked={formState.current_control === option.value}
+                  onChange={(event) => onCurrentControlChange(event.target.value)}
                   disabled={readOnly}
                 />
-                <span className={controlState === option.value ? "text-navy font-medium" : "text-gray-dark"}>
+                <span className={formState.current_control === option.value ? "text-navy font-medium" : "text-gray-dark"}>
                   {option.label}
                 </span>
               </label>
@@ -249,55 +705,60 @@ function QuestionCard({ question, controls, controlState, setControlState, readO
           </div>
         </div>
 
-        <div className="space-y-2 overflow-auto">
-          <div className="shadow-sm" style={{ width: CONTROL_TABLE_DIMENSIONS.width }}>
-            <table className="w-full table-fixed border-collapse border-spacing-0">
-              <colgroup>
-                <col style={{ width: CONTROL_TABLE_DIMENSIONS.firstColumnWidth }} />
-                {CONTROL_COLUMNS.map((column) => (
-                  <col key={column.value} style={{ width: column.width }} />
-                ))}
-              </colgroup>
+        <div className="rounded-2xl border border-[#0F2257] bg-[#030B26] overflow-hidden">
+          <div className="overflow-x-auto">
+            <table className="w-full table-fixed border-t border-[#0F2257] text-sm text-white">
               <thead>
-                <tr
-                  style={{ height: CONTROL_TABLE_DIMENSIONS.headerHeight }}
-                  className="bg-blue-light text-blue-dark"
-                >
-                  <th className="border border-blue-dark px-3 text-left body rounded-tl-[200px]">
+                <tr>
+                  <th className="bg-[#DDE6FF] px-6 py-3 text-left text-base font-semibold text-[#0E1B3D]">
                     Kendali yang Dipilih &amp; Alasan Pemilihan
                   </th>
-                  {CONTROL_COLUMNS.map((column) => (
-                    <th key={column.value} className="border border-blue-dark text-center body">
-                      {column.label}
+                  {CONTROL_VALUE_OPTIONS.map((option, index) => (
+                    <th
+                      key={option.value}
+                      className={`bg-[#DDE6FF] px-4 py-3 text-center text-base font-semibold text-[#0E1B3D] ${
+                        index === CONTROL_VALUE_OPTIONS.length - 1 ? "" : "border-r border-[#B8C5F5]"
+                      }`}
+                    >
+                      {option.label}
                     </th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {controls.map((control, index) => (
+                {controlMetrics.map((metric, metricIndex) => (
                   <tr
-                    key={control.code}
-                    style={{ height: CONTROL_TABLE_DIMENSIONS.rowHeight }}
-                    className={`${index % 2 === 0 ? "bg-white" : "bg-[#F9FBFF]"}`}
+                    key={metric.field}
+                    className={`bg-[#050E33] text-sm ${metricIndex !== controlMetrics.length - 1 ? "border-b border-[#101C46]" : ""}`}
                   >
-                    <td className="px-3 font-semibold text-navy">
-                      <div className="flex items-center gap-2 truncate">
-                        <span className="truncate body text-[#1F2D56]">{control.label}</span>
-                      </div>
+                    <td className="px-6 py-4">
+                      <p className="font-semibold text-white">{metric.label}</p>
+                      <p className="text-xs text-[#7D8BC2] mt-1">{metric.description}</p>
                     </td>
-                    {CONTROL_COLUMNS.map((column) => (
-                      <td key={`${control.code}-${column.value}`} className="border-l border-[#E1E7FB] px-2">
-                        <div className="flex items-center justify-center">
-                          <input
-                            type="radio"
-                            name={`control-${control.code}`}
-                            className="h-2.5 w-2.5 accent-navy"
-                            defaultChecked={control.value[column.value]}
-                            disabled={readOnly}
-                          />
-                        </div>
-                      </td>
-                    ))}
+                    {CONTROL_VALUE_OPTIONS.map((option, optionIndex) => {
+                      const isSelected = formState[metric.field] === option.value
+                      return (
+                        <td
+                          key={`${metric.field}-${option.value}`}
+                          className={`px-4 py-3 text-center align-middle ${
+                            optionIndex !== CONTROL_VALUE_OPTIONS.length - 1 ? "border-r border-[#101C46]" : ""
+                          }`}
+                        >
+                          <label className="inline-flex items-center justify-center gap-2 text-sm">
+                            <input
+                              type="radio"
+                              className="h-4 w-4 cursor-pointer appearance-none rounded-full border border-[#5C6BAE] bg-transparent transition checked:border-4 checked:border-[#6C8CFF] disabled:cursor-not-allowed"
+                              name={`metric-${metric.field}`}
+                              value={option.value}
+                              checked={isSelected}
+                              onChange={(event) => onMetricChange(metric.field, event.target.value)}
+                              disabled={readOnly}
+                            />
+                            <span className={isSelected ? "font-semibold text-white" : "text-[#95A3D7]"}>{option.label}</span>
+                          </label>
+                        </td>
+                      )
+                    })}
                   </tr>
                 ))}
               </tbody>
@@ -309,15 +770,22 @@ function QuestionCard({ question, controls, controlState, setControlState, readO
       <FormField
         label="Pembenaran (Justifikasi) terhadap Pengecualian"
         placeholder="Jelaskan alasan pemilihan dan pengecualian jika ada"
-        value={formData.justification}
-        onChange={(value) => setFormData({ ...formData, justification: value })}
+        value={formState.justification}
+        onChange={(value) => onFieldChange("justification", value)}
         readOnly={readOnly}
       />
       <FormField
         label="Ringkasan Penerapan / Pelaksanaan"
         placeholder="Ringkasan implementasi kontrol keamanan informasi"
-        value={formData.summary}
-        onChange={(value) => setFormData({ ...formData, summary: value })}
+        value={formState.implementation_summary}
+        onChange={(value) => onFieldChange("implementation_summary", value)}
+        readOnly={readOnly}
+      />
+
+      <RelatedDocs
+        docs={selectedDocuments}
+        onAddDocuments={onOpenDocumentPicker}
+        onRemoveDocument={onRemoveDocument}
         readOnly={readOnly}
       />
     </section>
@@ -333,13 +801,15 @@ function FormField({ label, placeholder, value, onChange, readOnly }) {
         onChange={(event) => onChange(event.target.value)}
         placeholder={placeholder}
         readOnly={readOnly}
-        className={`min-h-[110px] w-full rounded-2xl border border-[#E3E9FF] px-4 py-3 text-sm text-gray-700 focus-visible:border-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB2FF] ${readOnly ? "bg-[#ECEFF5]" : "bg-[#F6F7FB]"}`}
+        className={`min-h-[110px] w-full rounded-2xl border border-[#E3E9FF] px-4 py-3 text-sm text-gray-700 focus-visible:border-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB2FF] ${
+          readOnly ? "bg-[#ECEFF5]" : "bg-[#F6F7FB]"
+        }`}
       />
     </div>
   )
 }
 
-function RelatedDocs({ docs, readOnly }) {
+function RelatedDocs({ docs, onAddDocuments, onRemoveDocument, readOnly }) {
   return (
     <section className="rounded-2xl border border-[#2B7FFF] bg-white shadow-sm">
       <div className="flex flex-wrap items-center justify-between gap-4 rounded-t-2xl bg-[#2B7FFF] px-6 py-4 text-white">
@@ -348,53 +818,35 @@ function RelatedDocs({ docs, readOnly }) {
           <p className="text-xs text-white/80">{docs.length} dokumen dipilih</p>
         </div>
         {!readOnly && (
-          <Button className="bg-white text-[#2B7FFF] hover:bg-gray-100">
+          <Button className="bg-white text-[#2B7FFF] hover:bg-gray-100" onClick={onAddDocuments}>
             <ChevronDown className="mr-2 h-4 w-4" /> Tambah Dokumen Terkait
           </Button>
         )}
       </div>
 
       <div className="space-y-3 px-6 py-4">
+        {docs.length === 0 && <p className="text-sm text-gray-500">Belum ada dokumen terkait yang dipilih.</p>}
         {docs.map((doc) => (
           <div
             key={doc.id}
             className="flex flex-wrap items-center justify-between gap-4 rounded-xl border border-[#DCE8FF] bg-[#F6F9FF] px-4 py-3"
           >
             <div className="space-y-1">
-              <p className="text-xs font-semibold text-[#2B7FFF]">{doc.id}</p>
+              <p className="text-xs font-semibold text-[#2B7FFF]">{doc.code}</p>
               <p className="font-semibold text-navy">{doc.title}</p>
-              <p className="text-xs text-gray-500">{doc.description}</p>
+              <p className="text-xs text-gray-500">{doc.description || "-"}</p>
             </div>
-            <div className="flex items-center gap-2">
+            {!readOnly && (
               <Button
                 variant="ghost"
                 size="icon"
-                className="h-9 w-9 text-[#2B7FFF] hover:bg-white"
-                aria-label="Lihat dokumen"
+                className="h-9 w-9 text-red-500 hover:bg-white"
+                aria-label="Hapus dokumen"
+                onClick={() => onRemoveDocument(doc.id)}
               >
-                <Eye className="h-4 w-4" />
+                <X className="h-4 w-4" />
               </Button>
-              {!readOnly && (
-                <>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 text-green-500 hover:bg-white"
-                    aria-label="Pertahankan"
-                  >
-                    <Check className="h-4 w-4" />
-                  </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    className="h-9 w-9 text-red-500 hover:bg-white"
-                    aria-label="Hapus"
-                  >
-                    <X className="h-4 w-4" />
-                  </Button>
-                </>
-              )}
-            </div>
+            )}
           </div>
         ))}
       </div>
@@ -402,36 +854,37 @@ function RelatedDocs({ docs, readOnly }) {
   )
 }
 
-function CommentCard({ comment, setComment }) {
+function CommentCard({ reviewerComment }) {
   return (
     <section className="space-y-3 rounded-2xl border border-[#D8E2FF] bg-white p-6 shadow-sm">
-      <p className="text-sm font-semibold text-navy">Komentar Reviewer</p>
-      <textarea
-        value={comment}
-        onChange={(event) => setComment(event.target.value)}
-        placeholder="Placeholder"
-        className="min-h-[140px] w-full rounded-2xl border border-[#E3E9FF] bg-[#F6F7FB] p-4 text-sm text-gray-dark focus-visible:border-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB2FF]"
-      />
-      <div className="flex justify-end">
-        <Button disabled={!comment}>Simpan Komentar</Button>
+      <div>
+        <p className="text-sm font-semibold text-navy">Komentar Reviewer</p>
+        <p className="text-xs text-gray-500">Komentar hanya dapat ditambahkan melalui proses review.</p>
       </div>
+      <textarea
+        value={reviewerComment || ""}
+        readOnly
+        placeholder="Belum ada komentar reviewer"
+        className="min-h-[140px] w-full rounded-2xl border border-[#E3E9FF] bg-[#ECEFF5] p-4 text-sm text-gray-dark"
+      />
     </section>
   )
 }
 
-function ActionBar({ readOnly }) {
+function ActionBar({ readOnly, onSave, onPrevQuestion, onNextQuestion, isSaving }) {
   return (
     <div className="flex flex-col-reverse gap-4 rounded-2xl border border-[#D8E2FF] bg-white p-6 shadow-sm sm:flex-row sm:items-center sm:justify-between">
-      <Button variant="outline" className="w-full sm:w-auto">
+      <Button variant="outline" className="w-full sm:w-auto" onClick={onPrevQuestion}>
         ← Pertanyaan Sebelumnya
       </Button>
       <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row">
         {!readOnly && (
-          <Button className="w-full bg-green-500 text-white hover:bg-green-600 sm:w-auto">
+          <Button className="w-full bg-green-500 text-white hover:bg-green-600 sm:w-auto" onClick={onSave} disabled={isSaving}>
+            {isSaving && <Loader2 className="mr-2 h-4 w-4 animate-spin" />}
             Simpan Jawaban
           </Button>
         )}
-        <Button variant="default" className="w-full sm:w-auto">
+        <Button variant="default" className="w-full sm:w-auto" onClick={onNextQuestion}>
           Pertanyaan Selanjutnya →
         </Button>
       </div>
@@ -439,13 +892,13 @@ function ActionBar({ readOnly }) {
   )
 }
 
-function LegendCard({ documentMeta }) {
+function LegendCard({ activeCategoryCode }) {
   return (
     <section className="rounded-[4px] border border-blue-dark bg-blue-light text-sm text-[#1F2D56] shadow-sm">
       <div className="space-y-2 px-5 py-4">
         <p className="font-semibold text-navy">Keterangan:</p>
         <div className="space-y-1 text-blue-dark">
-          <p >Y = Ya</p>
+          <p>Y = Ya</p>
           <p>T = Tidak</p>
           <p>S = Sebagian</p>
         </div>
@@ -454,12 +907,12 @@ function LegendCard({ documentMeta }) {
         <hr className="border-t border-blue" />
         <p>PL = Persyaratan Legal</p>
         <p>KK = Kewajiban Kontrak</p>
-        <p>PK/PB = Persyaratan Kerja / Praktek yang Baik</p>
-        <p>HPR = Hasil Penilaian Risiko (Keamanan Informasi)</p>
+        <p>PK/PB = Persyaratan Kerja / Praktik yang Baik</p>
+        <p>HPR = Hasil Penilaian Risiko</p>
       </div>
       <div className="px-5 py-3 text-xs text-blue-dark">
         <p>Kategori Aktif</p>
-        <p className="font-semibold text-blue-dark">{documentMeta.category.code}</p>
+        <p className="font-semibold text-blue-dark">{activeCategoryCode || "-"}</p>
       </div>
     </section>
   )
@@ -472,7 +925,7 @@ function LegendBar() {
     "S = Sebagian",
     "PL = Persyaratan Legal",
     "KK = Kewajiban Kontrak",
-    "PK/PB = Persyaratan Kerja / Praktek yang Baik",
+    "PK/PB = Persyaratan Kerja / Praktik yang Baik",
     "HPR = Hasil Penilaian Risiko (Keamanan Informasi)",
   ]
 
@@ -488,24 +941,22 @@ function LegendBar() {
   )
 }
 
-function Navigator({
-  sections,
-  selectedCategory,
-  onCategoryChange,
-  selectedQuestion,
-  onQuestionChange,
-}) {
+function Navigator({ sections, selectedCategory, onCategoryChange, selectedQuestion, onQuestionChange, answersByQuestion }) {
   const [expandedCategory, setExpandedCategory] = useState(selectedCategory)
 
-  useMemo(() => {
+  useEffect(() => {
     setExpandedCategory(selectedCategory)
   }, [selectedCategory])
 
-  const getQuestionStatus = (isActive) => {
-    if (isActive) {
+  const getQuestionStatusClass = (questionId) => {
+    const answer = answersByQuestion.get(questionId)
+    if (!answer) {
+      return "border-gray-300 text-gray-400 bg-white"
+    }
+    if (answer.is_review) {
       return "border-green-500 text-green-500 bg-green-50"
     }
-    return "border-gray-300 text-gray-400 bg-white"
+    return "border-yellow-400 text-yellow-500 bg-yellow-50"
   }
 
   return (
@@ -530,7 +981,7 @@ function Navigator({
                 >
                   <span className="text-xs">
                     <span className="bg-navy text-gray-light mr-2 px-2 py-1 rounded-[4px]">{section.code}</span>
-                    <span className="ml-1 body text-navy">{section.label || section.title}</span>
+                    <span className="ml-1 body text-navy">{section.title}</span>
                   </span>
                   <ChevronRight className={`h-4 w-4 transition-transform ${isExpanded ? "rotate-90" : ""}`} />
                 </button>
@@ -548,15 +999,15 @@ function Navigator({
                       >
                         <div className="flex items-center justify-between gap-3">
                           <div className="flex flex-col">
-                            <span className="small-medium text-navy">{question.id}</span>
-                            <span className="small text-gray-600">{question.label}</span>
+                            <span className="small-medium text-navy">{question.code || question.id}</span>
+                            <span className="small text-gray-600">{question.title}</span>
                           </div>
                           <span
-                            className={`inline-flex h-4 w-4 items-center justify-center rounded-full border ${getQuestionStatus(
-                              selectedQuestion === question.id,
+                            className={`inline-flex items-center justify-center rounded-full border px-2 py-0.5 text-[10px] font-semibold ${getQuestionStatusClass(
+                              question.id,
                             )}`}
                           >
-                            <span className="h-2 w-2 rounded-full bg-current" />
+                            {answersByQuestion.get(question.id)?.is_review ? "Review" : answersByQuestion.get(question.id) ? "Draft" : "Kosong"}
                           </span>
                         </div>
                       </button>
@@ -577,6 +1028,7 @@ function Navigator({
     </section>
   )
 }
+
 function ViewModeDropdown({ viewMode, onViewModeChange }) {
   const [isOpen, setIsOpen] = useState(false)
   const activeOption = VIEW_MODE_OPTIONS.find((option) => option.value === viewMode) ?? VIEW_MODE_OPTIONS[0]
@@ -587,7 +1039,7 @@ function ViewModeDropdown({ viewMode, onViewModeChange }) {
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          className="flex items-center justify-between gap-2 rounded-[4px] border border-navy w-[364px] h-12 bg-state px-4 py-2 text-sm body text-navy shadow-sm"
+          className="flex items-center justify-between gap-2 rounded-[4px] border border-navy w-full md:w-[364px] h-12 bg-state px-4 py-2 text-sm body text-navy shadow-sm"
         >
           <div className="flex items-center gap-2">
             <ActiveIcon className="text-gray-500" />
@@ -600,7 +1052,7 @@ function ViewModeDropdown({ viewMode, onViewModeChange }) {
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="start" className="w-[364px] bg-white p-2">
-       
+        <DropdownMenuLabel className="text-xs text-gray-500">Mode Tampilan</DropdownMenuLabel>
         <div className="space-y-1">
           {VIEW_MODE_OPTIONS.map((option) => {
             const OptionIcon = option.icon
@@ -613,13 +1065,11 @@ function ViewModeDropdown({ viewMode, onViewModeChange }) {
                   setIsOpen(false)
                 }}
                 className={`flex h-12 w-full items-center gap-3 px-3 text-sm transition ${
-                  isSelected
-                    ? "text-navy bg-state"
-                    : "text-gray-700 hover:bg-gray-100"
+                  isSelected ? "text-navy bg-state" : "text-gray-700 hover:bg-gray-100"
                 }`}
               >
                 <OptionIcon className="h-4 w-4 text-gray-500" />
-                <div className="flex flex-col ">
+                <div className="flex flex-col">
                   <span>{option.label}</span>
                 </div>
               </DropdownMenuItem>
@@ -628,5 +1078,110 @@ function ViewModeDropdown({ viewMode, onViewModeChange }) {
         </div>
       </DropdownMenuContent>
     </DropdownMenu>
+  )
+}
+
+function DocumentPickerDialog({ open, onOpenChange, selectedDocuments, onConfirm }) {
+  const [search, setSearch] = useState("")
+  const debouncedSearch = useDebouncedValue(search, 300)
+
+  const documentsQuery = useQuery({
+    queryKey: ["documents", "picker", debouncedSearch],
+    queryFn: () =>
+      documentsService.listDocuments({
+        search: debouncedSearch || undefined,
+        per_page: 50,
+      }),
+    enabled: open,
+  })
+
+  const documents = useMemo(
+    () => (documentsQuery.data?.data ?? []).map(mapDocumentOption),
+    [documentsQuery.data],
+  )
+
+  const [tempSelection, setTempSelection] = useState(() => new Map())
+
+  useEffect(() => {
+    if (!open) return
+    const map = new Map()
+    selectedDocuments.forEach((doc) => map.set(doc.id, doc))
+    setTempSelection(map)
+  }, [open, selectedDocuments])
+
+  const toggleDocument = (doc) => {
+    setTempSelection((prev) => {
+      const next = new Map(prev)
+      if (next.has(doc.id)) {
+        next.delete(doc.id)
+      } else {
+        next.set(doc.id, doc)
+      }
+      return next
+    })
+  }
+
+  const handleConfirm = () => {
+    onConfirm(Array.from(tempSelection.values()))
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-[640px]">
+        <DialogHeader>
+          <DialogTitle>Tambah Dokumen Terkait</DialogTitle>
+          <DialogDescription>Pilih dokumen yang relevan sebagai referensi jawaban.</DialogDescription>
+        </DialogHeader>
+
+        <div className="space-y-4">
+          <Input
+            placeholder="Cari dokumen berdasarkan nama"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            className="bg-state text-navy placeholder:text-gray-dark"
+          />
+
+          <div className="max-h-[420px] overflow-y-auto space-y-3 pr-1">
+            {documentsQuery.isLoading && <p className="text-sm text-gray-500">Memuat dokumen...</p>}
+            {!documentsQuery.isLoading && documents.length === 0 && (
+              <p className="text-sm text-gray-500">Tidak ada dokumen yang sesuai.</p>
+            )}
+            {documents.map((doc) => {
+              const isSelected = tempSelection.has(doc.id)
+              return (
+                <button
+                  key={doc.id}
+                  type="button"
+                  onClick={() => toggleDocument(doc)}
+                  className={`flex w-full items-center justify-between rounded-2xl border px-4 py-3 text-left transition ${
+                    isSelected ? "border-blue-500 bg-blue-50" : "border-[#DCE8FF] bg-[#F6F9FF] hover:bg-white"
+                  }`}
+                >
+                  <div className="space-y-1">
+                    <p className="text-xs font-semibold text-[#2B7FFF]">{doc.code}</p>
+                    <p className="font-semibold text-navy">{doc.title}</p>
+                    <p className="text-xs text-gray-500">{doc.description}</p>
+                  </div>
+                  <div
+                    className={`flex h-5 w-5 items-center justify-center rounded border ${
+                      isSelected ? "border-blue-500 bg-blue-500 text-white" : "border-gray-300 bg-white"
+                    }`}
+                  >
+                    {isSelected && <Check className="h-3 w-3" />}
+                  </div>
+                </button>
+              )
+            })}
+          </div>
+        </div>
+
+        <DialogFooter className="flex gap-2">
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Batal
+          </Button>
+          <Button onClick={handleConfirm}>Simpan Dokumen</Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
   )
 }

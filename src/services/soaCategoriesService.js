@@ -12,6 +12,11 @@ export const soaCategoriesService = {
       params,
     }),
 
+  listCategoriesWithQuestions: (params = {}) =>
+    apiClient("/soa-categories/with-questions", {
+      params,
+    }),
+
   getCategory: (categoryId, params = {}) =>
     apiClient(`/admin/soa-categories/${categoryId}`, {
       params,

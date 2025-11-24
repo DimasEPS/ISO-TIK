@@ -95,20 +95,28 @@ export function ScaleTable({ data, search = "", categoryFilter = "Semua Kategori
                       ))}
                       <td className="border border-[#E3E9FF] px-3 py-3 text-[#1C2754]">{row.justification}</td>
                       <td className="border border-[#E3E9FF] px-3 py-3 text-[#1C2754]">
-                        <ol className="list-decimal space-y-1 pl-4">
-                          {row.summary.map((item, index) => (
-                            <li key={`${row.id}-summary-${index}`}>{item}</li>
-                          ))}
-                        </ol>
+                        {row.summary?.length ? (
+                          <ol className="list-decimal space-y-1 pl-4">
+                            {row.summary.map((item, index) => (
+                              <li key={`${row.id}-summary-${index}`}>{item}</li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <span>-</span>
+                        )}
                       </td>
                       <td className="border border-[#E3E9FF] px-3 py-3 text-[#1C2754]">
-                        <ol className="list-decimal space-y-1 pl-4">
-                          {row.documents.map((doc) => (
-                            <li key={`${row.id}-doc-${doc.id}`}>
-                              <span className="font-semibold">{doc.id}</span> - {doc.title}
-                            </li>
-                          ))}
-                        </ol>
+                        {row.documents?.length ? (
+                          <ol className="list-decimal space-y-1 pl-4">
+                            {row.documents.map((doc, index) => (
+                              <li key={`${row.id}-doc-${doc.id ?? index}`}>
+                                <span className="font-semibold">{doc.id || doc.code}</span> - {doc.title || "-"}
+                              </li>
+                            ))}
+                          </ol>
+                        ) : (
+                          <span>-</span>
+                        )}
                       </td>
                       <td className="border border-[#E3E9FF] px-3 py-3 text-center">
                         <span

@@ -99,6 +99,21 @@ export default function PertanyaanSoA() {
     [deleteQuestionMutation],
   )
 
+  const handlePromptDeleteQuestion = useCallback(
+    (question) => {
+      if (!question) {
+        setDeleteQuestion(null)
+        return
+      }
+
+      setDeleteQuestion({
+        ...question,
+        judul: question.judul || question.title || "Pertanyaan",
+      })
+    },
+    [setDeleteQuestion],
+  )
+
   return (
     <div className="space-y-6">
 
@@ -214,9 +229,7 @@ export default function PertanyaanSoA() {
                   type="button"
                   className="rounded p-2 transition-colors hover:bg-red-50"
                   title="Hapus"
-                  onClick={() =>
-                    setDeleteQuestion({ ...item, judul: item.title })
-                  }
+                  onClick={() => handlePromptDeleteQuestion(item)}
                 >
                   <Trash2 className="h-5 w-5 text-red-500" />
                 </button>
@@ -251,7 +264,6 @@ export default function PertanyaanSoA() {
         documentData={deleteQuestion}
         entityLabel="Pertanyaan"
         onConfirm={(payload) => payload && handleDeleteQuestion(payload)}
-        caseSensitive={false}
       />
     </div>
   )

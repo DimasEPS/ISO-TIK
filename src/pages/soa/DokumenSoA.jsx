@@ -234,17 +234,32 @@ export default function DokumenSoA() {
     [updateDocument],
   )
 
+  const handlePromptDeleteDocument = useCallback(
+    (document) => {
+      if (!document) {
+        setDeleteDoc(null)
+        return
+      }
+
+      setDeleteDoc({
+        ...document,
+        judul: document.judul || document.noDoc || "Dokumen SoA",
+      })
+    },
+    [setDeleteDoc],
+  )
+
   const columns = useMemo(
     () =>
       buildSoAColumns({
         onPreview: handlePreview,
         onDownload: handleDownload,
         downloadingId: downloadingDocId,
-        onDelete: setDeleteDoc,
+        onDelete: handlePromptDeleteDocument,
         onEdit: handleEditDocument,
         isUpdating,
       }),
-    [handlePreview, handleDownload, downloadingDocId, setDeleteDoc, handleEditDocument, isUpdating],
+    [handlePreview, handleDownload, downloadingDocId, handlePromptDeleteDocument, handleEditDocument, isUpdating],
   )
 
   const handleCreateDocument = useCallback(
@@ -361,6 +376,7 @@ export default function DokumenSoA() {
             typeof payload === "string" ? payload : payload?.id
           if (documentId) handleDeleteDocument(documentId)
         }}
+        entityLabel="Dokumen SoA"
       />
 
     </div>

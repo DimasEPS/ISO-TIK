@@ -78,6 +78,14 @@ export function AlertIconDialog({
     }
   }
 
+  const handleNavigateToReview = (mode) => {
+    const params = new URLSearchParams()
+    if (mode) params.set("mode", mode)
+    if (row?.id) params.set("documentId", row.id)
+    const query = params.toString()
+    navigate(`/admin/soa/review${query ? `?${query}` : ""}`)
+  }
+
   const defaultTrigger = (
     <button type="button" className={className}>
       {type === "view" && (
@@ -145,7 +153,7 @@ export function AlertIconDialog({
                 variant="outline"
                 onClick={() => {
                   setOpen(false)
-                  navigate("/admin/soa/review?mode=view")
+                  handleNavigateToReview("view")
                 }}
               >
                 Lihat Jawaban
@@ -154,7 +162,7 @@ export function AlertIconDialog({
                 type="button"
                 onClick={() => {
                   setOpen(false)
-                  navigate("/admin/soa/review")
+                  handleNavigateToReview()
                 }}
               >
                 Isi Jawaban

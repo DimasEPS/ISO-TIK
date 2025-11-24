@@ -84,6 +84,21 @@ export default function KategoriSoA() {
     [deleteCategory],
   )
 
+  const handlePromptDeleteCategory = useCallback(
+    (category) => {
+      if (!category) {
+        setCategoryToDelete(null)
+        return
+      }
+
+      setCategoryToDelete({
+        ...category,
+        judul: category.judul || category.name || "Kategori",
+      })
+    },
+    [setCategoryToDelete],
+  )
+
   return (
     <div className="space-y-6">
       <div className="flex flex-wrap items-center gap-4 rounded-[4px] p-4">
@@ -163,9 +178,7 @@ export default function KategoriSoA() {
                     type="button"
                     className="rounded p-2 transition-colors hover:bg-red-50"
                     title="Hapus"
-                    onClick={() =>
-                      setCategoryToDelete({ ...item, judul: item.name ?? "Kategori" })
-                    }
+                    onClick={() => handlePromptDeleteCategory(item)}
                   >
                     <Trash2 className="h-5 w-5 text-red-500" />
                   </button>

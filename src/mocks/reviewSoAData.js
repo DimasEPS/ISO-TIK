@@ -38,18 +38,6 @@ export const reviewControlMatrix = [
     description: "Mitigasi berdasarkan hasil analisis risiko keamanan informasi.",
     value: { yes: true, no: false, partial: false },
   },
-  {
-    code: "DL",
-    label: "Dampak Layanan",
-    description: "Analisis dampak layanan terhadap pelanggan ketika terjadi insiden.",
-    value: { yes: false, no: true, partial: false },
-  },
-  {
-    code: "SJ",
-    label: "Sumberdaya & Jadwal",
-    description: "Kesesuaian jadwal implementasi dengan ketersediaan SDM.",
-    value: { yes: true, no: false, partial: false },
-  },
 ]
 
 export const reviewRelatedDocuments = [

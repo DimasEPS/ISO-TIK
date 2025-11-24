@@ -133,6 +133,21 @@ export default function Dokumen() {
     [fetchDocumentDetail],
   )
 
+  const handlePromptDeleteDocument = useCallback(
+    (document) => {
+      if (!document) {
+        setDeleteDoc(null)
+        return
+      }
+
+      setDeleteDoc({
+        ...document,
+        judul: document.judul || document.noDoc || "Dokumen",
+      })
+    },
+    [setDeleteDoc],
+  )
+
   const handleDeleteDocument = useCallback(
     async (document) => {
       if (!document?.id) return
@@ -217,7 +232,7 @@ export default function Dokumen() {
               type="button"
               title="Hapus"
               className="text-[#FB2C36] hover:text-red-500"
-              onClick={() => setDeleteDoc(row)}
+              onClick={() => handlePromptDeleteDocument(row)}
             >
               <Trash2 className="h-5 w-5" />
             </button>
@@ -225,7 +240,7 @@ export default function Dokumen() {
         ),
       },
     ],
-    [handleDownloadDocument, handleEditDocument, handlePreviewDocument],
+    [handleDownloadDocument, handleEditDocument, handlePreviewDocument, handlePromptDeleteDocument],
   )
 
   return (
@@ -328,7 +343,6 @@ export default function Dokumen() {
         }}
         documentData={deleteDoc}
         onConfirm={(document) => handleDeleteDocument(document)}
-        caseSensitive={false}
         entityLabel="Dokumen"
       />
     </div>
