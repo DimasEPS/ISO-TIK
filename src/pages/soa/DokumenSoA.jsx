@@ -1,5 +1,6 @@
 import { useCallback, useMemo, useState } from "react"
 import { Download, FilePen, FileText, Trash2, Eye, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 import { PaginateControls, SearchBar, StatusDropdown, Table as AdminTable } from "@/components/admin/table"
 import { AlertIconDialog } from "@/components/admin/soa/AlertIconDialog"
 import { useSoADocuments } from "./hooks/useSoADocuments"
@@ -8,6 +9,7 @@ import { downloadSoAReviewPDF, getSoAReviewPDFPreview } from "@/generatePDF/gene
 import { OverlayForm } from "@/components/admin/soa/OverlayForm"
 import { usePageTemplate } from "@/hooks/usePageTemplate"
 import { DocumentDeleteDialog } from "@/pages/documents/components/DocumentDeleteDialog"
+import { getSoAReviewExportData } from "@/services/soaReviewExportService"
 
 const FILTER_OPTIONS = [
   { value: "Semua Status" },
@@ -77,7 +79,7 @@ const buildSoAColumns = ({ onPreview, onDownload, downloadingId, onDelete, onEdi
     cellClassName: "text-center",
     render: (row) => (
       <span
-        className={`inline-flex items-center justify-center rounded-[4px] px-3 py-1 text-xs font-medium ${
+        className={`inline-flex items-center justify-center rounded px-3 py-1 text-xs font-medium ${
           STATUS_STYLES[row.status] ??
           "bg-gray-100 text-gray-600 border border-gray-200"
         }`}
@@ -98,7 +100,7 @@ const buildSoAColumns = ({ onPreview, onDownload, downloadingId, onDelete, onEdi
           row={row}
           trigger={() => (
             <button type="button">
-              <Eye className="text-[#121A2E] w-5 h-5 cursor-pointer" />
+              <Eye className="textEye-[#121A2E] w-5 h-5 cursor-pointer" />
             </button>
           )}
         />
@@ -196,18 +198,31 @@ export default function DokumenSoA() {
   }, [])
 
   const handleDownload = useCallback(async (row) => {
-    if (!row) return
+    if (!row?.id) {
+      toast.error("Dokumen SoA tidak ditemukan.")
+      return false
+    }
+
     setDownloadingDocId(row.noDoc)
     try {
+      const reviewData = await getSoAReviewExportData(row.id)
+      if (!reviewData.sections.length) {
+        toast.warning("Belum ada jawaban SoA untuk dokumen ini. PDF akan menggunakan placeholder.")
+      }
+
       await downloadSoAReviewPDF(row, {
+        ...reviewData,
         filename: `review-soa-${(row.noDoc || row.judul || "dokumen").replace(/\s+/g, "-").toLowerCase()}.pdf`,
       })
+      return true
     } catch (error) {
       console.error("Gagal mengunduh PDF SoA", error)
+      toast.error(error?.message ?? "Gagal mengunduh PDF SoA.")
+      return false
     } finally {
       setDownloadingDocId(null)
     }
-  }, [])
+  }, [getSoAReviewExportData])
 
   const handleClosePreview = useCallback((open) => {
     setIsPreviewOpen(open)
@@ -217,9 +232,12 @@ export default function DokumenSoA() {
   }, [])
 
   const previewBuilder = useCallback(async () => {
-    if (!previewDoc) return null
-    return getSoAReviewPDFPreview(previewDoc)
-  }, [previewDoc])
+    if (!previewDoc?.id) return null
+
+    const reviewData = await getSoAReviewExportData(previewDoc.id)
+
+    return getSoAReviewPDFPreview(previewDoc, reviewData)
+  }, [previewDoc, getSoAReviewExportData])
 
   const handleEditDocument = useCallback(
     async (documentId, payload) => {
@@ -264,11 +282,29 @@ export default function DokumenSoA() {
 
   const handleCreateDocument = useCallback(
     async (payload) => {
+      const trimmedPayload = {
+        document_number: payload?.document_number?.trim(),
+        publish_date: payload?.publish_date,
+        title: payload?.title?.trim(),
+        revision: payload?.revision?.trim(),
+        classification: payload?.classification?.trim() || null,
+        compiler_name: payload?.compiler_name?.trim() || null,
+        iso_chairman_name: payload?.iso_chairman_name?.trim() || null,
+        director_name: payload?.director_name?.trim() || null,
+        status: payload?.status,
+      }
+
+      if (!trimmedPayload.document_number || !trimmedPayload.title) {
+        toast.warning("Nomor dan judul dokumen wajib diisi.")
+        return
+      }
+
       try {
-        await createDocument(payload)
+        await createDocument(trimmedPayload)
+        toast.success("Dokumen SoA berhasil ditambahkan.")
       } catch (createError) {
         console.error("Gagal membuat dokumen SoA", createError)
-        alert(createError?.message ?? "Gagal membuat dokumen SoA")
+        toast.error(createError?.message ?? "Gagal membuat dokumen SoA")
       }
     },
     [createDocument],
@@ -280,9 +316,10 @@ export default function DokumenSoA() {
       try {
         await deleteDocument(documentId)
         setDeleteDoc(null)
+        toast.success("Dokumen SoA berhasil dihapus.")
       } catch (deleteError) {
         console.error("Gagal menghapus dokumen SoA", deleteError)
-        alert(deleteError?.message ?? "Gagal menghapus dokumen SoA")
+        toast.error(deleteError?.message ?? "Gagal menghapus dokumen SoA")
       }
     },
     [deleteDocument],
@@ -294,7 +331,7 @@ export default function DokumenSoA() {
         <SearchBar
           value={searchQuery}
           onChange={handleSearchChange}
-          className="flex-1 min-w-[240px]"
+          className="flex-1 min-w-60"
           inputGroupClassName="h-14 w-full"
         />
 
@@ -355,11 +392,10 @@ export default function DokumenSoA() {
         onDownload={
           previewDoc
             ? async () => {
-                await downloadSoAReviewPDF(previewDoc, {
-                  filename: `review-soa-${(previewDoc.noDoc || previewDoc.judul || "dokumen")
-                    .replace(/\s+/g, "-")
-                    .toLowerCase()}.pdf`,
-                })
+                const success = await handleDownload(previewDoc)
+                if (!success) {
+                  throw new Error("Gagal mengunduh PDF SoA")
+                }
               }
             : null
         }

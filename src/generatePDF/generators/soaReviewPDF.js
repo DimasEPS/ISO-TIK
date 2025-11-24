@@ -9,7 +9,6 @@ import {
   checkNewPage,
 } from "../utils/pdfHelpers"
 import { PDF_CONFIG } from "../utils/pdfConfig"
-import { scaleTableData } from "@/mocks/scaleTable"
 
 const buildRows = (sections, controlCodes) => {
   if (!sections?.length) return []
@@ -102,8 +101,8 @@ const getDocumentMeta = (documentData = {}) => {
 
 export const buildSoAReviewPDFDocument = async (documentData = {}, options = {}) => {
   const {
-    controlCodes = scaleTableData.controlCodes,
-    sections = scaleTableData.sections,
+    controlCodes = [],
+    sections = [],
     autoSave = false,
     filename = `review-soa-${documentData?.noDoc || "dokumen"}.pdf`,
   } = options

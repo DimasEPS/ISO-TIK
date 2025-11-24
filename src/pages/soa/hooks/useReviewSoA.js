@@ -140,6 +140,21 @@ export function useReviewSoA({ documentId, categoriesPerPage = 100 } = {}) {
     },
   })
 
+  const reviewAnswerMutation = useMutation({
+    mutationFn: ({ answerId, reviewer_comment }) =>
+      soaAnswersService.reviewAnswer(answerId, {
+        reviewer_comment,
+      }),
+    onSuccess: (_data, variables) => {
+      invalidateAnswers()
+      if (variables?.answerId) {
+        queryClient.invalidateQueries({
+          queryKey: ["soa-answers", "detail", variables.answerId],
+        })
+      }
+    },
+  })
+
   const saveAnswer = async ({ answerId, payload }) => {
     if (answerId) {
       const response = await updateAnswerMutation.mutateAsync({
@@ -150,6 +165,14 @@ export function useReviewSoA({ documentId, categoriesPerPage = 100 } = {}) {
     }
 
     const response = await createAnswerMutation.mutateAsync(payload)
+    return response?.data ?? response
+  }
+
+  const reviewAnswer = async ({ answerId, reviewer_comment }) => {
+    const response = await reviewAnswerMutation.mutateAsync({
+      answerId,
+      reviewer_comment,
+    })
     return response?.data ?? response
   }
 
@@ -166,6 +189,8 @@ export function useReviewSoA({ documentId, categoriesPerPage = 100 } = {}) {
     answersError: answersQuery.error,
     saveAnswer,
     isSavingAnswer: createAnswerMutation.isPending || updateAnswerMutation.isPending,
+    reviewAnswer,
+    isReviewingAnswer: reviewAnswerMutation.isPending,
     refetchAnswers: answersQuery.refetch,
   }
 }

@@ -42,13 +42,13 @@ export function StatusDropdown({
           <Button
             ref={triggerRef}
             variant="outline"
-            className={`flex h-12 w-full cursor-pointer items-center justify-between gap-2 bg-state px-4 text-sm font-medium text-navy ${classNameButton} ${
+            className={`flex h-12 w-full cursor-pointer items-center justify-center gap-2 bg-state px-4 text-sm font-medium text-navy ${classNameButton} ${
               isMenuOpen ? "border-navy shadow" : "bg-state text-navy"
             }`}
           >
             <span className="flex items-center gap-2 truncate">
               {showFunnelIcon && <Funnel className="size-4" />}
-              <span className="truncate">
+              <span className="truncat">
                 {selectedOption?.label && value !== "Semua Kategori"
                   ? `${selectedOption.label}`
                   : value}
