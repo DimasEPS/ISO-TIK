@@ -3,11 +3,14 @@ import { useNavigate, useParams, useLocation, Link } from "react-router-dom";
 import { usePageTemplate } from "@/hooks/usePageTemplate";
 import { SearchBar, PaginateControls } from "@/components/admin/table";
 import { ChevronRight } from "lucide-react";
+import { useDocumentChecklists } from "./hooks/useDocumentChecklists";
+import { useQuery } from "@tanstack/react-query";
+import { auditService } from "@/services/auditService";
 
 const PAGINATE_OPTIONS = [10, 20, 50, 100];
 
 export default function DaftarChecklist() {
-  const { id } = useParams();
+  const { id: documentId } = useParams();
   const location = useLocation();
   const navigate = useNavigate();
   usePageTemplate({
@@ -33,92 +36,25 @@ export default function DaftarChecklist() {
   const [perPage, setPerPage] = useState(10);
   const [activePage, setActivePage] = useState(1);
 
-  // Mock data for checklist cards
-  const checklistCards = useMemo(
-    () => [
-      {
-        id: 1,
-        title: "Keamanan Fisik Data Center",
-        description: "Checklist untuk aspek keamanan fisik ruang data center",
-        aspek: 2,
-        kategori: 10,
-        pertanyaan: 15,
-        checklistExcel: 25,
-        itemAudit: 65,
-      },
-      {
-        id: 2,
-        title: "Keamanan Fisik Data Center",
-        description: "Checklist untuk aspek keamanan fisik ruang data center",
-        aspek: 2,
-        kategori: 10,
-        pertanyaan: 15,
-        checklistExcel: 25,
-        itemAudit: 65,
-      },
-      {
-        id: 3,
-        title: "Keamanan Fisik Data Center",
-        description: "Checklist untuk aspek keamanan fisik ruang data center",
-        aspek: 2,
-        kategori: 10,
-        pertanyaan: 15,
-        checklistExcel: 25,
-        itemAudit: 65,
-      },
-      {
-        id: 4,
-        title: "Keamanan Fisik Data Center",
-        description: "Checklist untuk aspek keamanan fisik ruang data center",
-        aspek: 2,
-        kategori: 10,
-        pertanyaan: 15,
-        checklistExcel: 25,
-        itemAudit: 65,
-      },
-      {
-        id: 5,
-        title: "Keamanan Fisik Data Center",
-        description: "Checklist untuk aspek keamanan fisik ruang data center",
-        aspek: 2,
-        kategori: 10,
-        pertanyaan: 15,
-        checklistExcel: 25,
-        itemAudit: 65,
-      },
-      {
-        id: 6,
-        title: "Keamanan Fisik Data Center",
-        description: "Checklist untuk aspek keamanan fisik ruang data center",
-        aspek: 2,
-        kategori: 10,
-        pertanyaan: 15,
-        checklistExcel: 25,
-        itemAudit: 65,
-      },
-      {
-        id: 7,
-        title: "Keamanan Fisik Data Center",
-        description: "Checklist untuk aspek keamanan fisik ruang data center",
-        aspek: 2,
-        kategori: 10,
-        pertanyaan: 15,
-        checklistExcel: 25,
-        itemAudit: 65,
-      },
-      {
-        id: 8,
-        title: "Keamanan Fisik Data Center",
-        description: "Checklist untuk aspek keamanan fisik ruang data center",
-        aspek: 2,
-        kategori: 10,
-        pertanyaan: 15,
-        checklistExcel: 25,
-        itemAudit: 65,
-      },
-    ],
-    []
-  );
+  // Get document detail
+  const { data: _documentDetail } = useQuery({
+    queryKey: ["auditDocument", documentId],
+    queryFn: () => auditService.getAuditDocument(documentId),
+    select: (response) => response.data.audit_document,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Get checklists for this document
+  const { checklists: checklistsData = [] } = useDocumentChecklists(documentId);
+
+  // Use real data if available, fallback to mock
+  const checklistCards = useMemo(() => {
+    if (checklistsData && checklistsData.length > 0) {
+      return checklistsData;
+    }
+    // Fallback mock data
+    return [];
+  }, [checklistsData]);
 
   // Filter cards based on search query
   const filteredCards = useMemo(() => {
@@ -150,7 +86,7 @@ export default function DaftarChecklist() {
   const handleCardClick = (card) => {
     // If mode is "view", go to Review page, otherwise go to Aspek Pertanyaan
     if (mode === "view") {
-      navigate(`/admin/audit/dokumen/${id}/review/${card.id}`, {
+      navigate(`/admin/audit/dokumen/${documentId}/review/${card.id}`, {
         state: {
           dokumenTitle,
           lokasi,
@@ -161,7 +97,7 @@ export default function DaftarChecklist() {
         },
       });
     } else {
-      navigate(`/admin/audit/dokumen/${id}/aspek/${card.id}`, {
+      navigate(`/admin/audit/dokumen/${documentId}/aspek/${card.id}`, {
         state: {
           dokumenTitle,
           lokasi,
@@ -240,31 +176,31 @@ export default function DaftarChecklist() {
               <div className="flex justify-between items-center">
                 <span className="text-gray-dark small">Aspek</span>
                 <span className="text-navy body-medium font-semibold">
-                  {card.aspek}
+                  {card.aspects_count || 0}
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-dark small">Kategori</span>
                 <span className="text-navy body-medium font-semibold">
-                  {card.kategori}
+                  {card.categories_count || 0}
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-dark small">Pertanyaan</span>
                 <span className="text-navy body-medium font-semibold">
-                  {card.pertanyaan}
+                  {card.questions_count || 0}
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-dark small">Checklist Excel</span>
                 <span className="text-navy body-medium font-semibold">
-                  {card.checklistExcel}
+                  {card.excel_checklists_count || 0}
                 </span>
               </div>
               <div className="flex justify-between items-center">
                 <span className="text-gray-dark small">Item Audit</span>
                 <span className="text-navy body-medium font-semibold">
-                  {card.itemAudit}
+                  {card.excel_questions_count || 0}
                 </span>
               </div>
             </div>

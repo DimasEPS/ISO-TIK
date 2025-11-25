@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation, useParams, Link, useNavigate } from "react-router-dom";
-import { ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import {
@@ -10,26 +10,12 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { ReviewExcelAuditTable } from "@/components/admin/audit/ReviewExcelAuditTable";
-import { reviewExcelData } from "@/mocks/excelAuditData";
-
-// Navigator data
-const navigatorData = [
-  {
-    id: 1,
-    name: "Fully Redundant Critical Systems",
-    expanded: true,
-  },
-  {
-    id: 2,
-    name: "Jenis Checklist excel 1",
-    expanded: false,
-  },
-  {
-    id: 3,
-    name: "Jenis Checklist excel 2",
-    expanded: false,
-  },
-];
+import { toast } from "sonner";
+import {
+  useExcelChecklistsByChecklistId,
+  useExcelChecklistQuestions,
+} from "./hooks/useExcelChecklistQuestions";
+import { auditService } from "@/services/auditService";
 
 function ReviewPertanyaanExcel() {
   const { id, checklistId } = useParams();
@@ -38,22 +24,25 @@ function ReviewPertanyaanExcel() {
 
   const { dokumenTitle, lokasi, tanggalAudit, revisi, mode } =
     location.state || {};
+
+  // Fetch excel checklists by checklist ID
+  const { data: excelChecklists = [], isLoading: isLoadingExcelChecklists } =
+    useExcelChecklistsByChecklistId(checklistId);
+
+  const excelChecklistId = excelChecklists[0]?.id;
+
+  // Fetch questions
+  const {
+    data: questions = [],
+    isLoading: isLoadingQuestions,
+    refetch: refetchQuestions,
+  } = useExcelChecklistQuestions(id, excelChecklistId);
+
   const [activeTab, setActiveTab] = useState("excel");
-  const [reviewData, setReviewData] = useState(reviewExcelData);
-  const [checklistExcel, setChecklistExcel] = useState(navigatorData);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
   const [komentarReviewer, setKomentarReviewer] = useState("");
-
-  const toggleChecklist = (checklistId) => {
-    setChecklistExcel(
-      checklistExcel.map((checklist) =>
-        checklist.id === checklistId
-          ? { ...checklist, expanded: !checklist.expanded }
-          : checklist
-      )
-    );
-  };
+  const [isSaving, setIsSaving] = useState(false);
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
@@ -65,63 +54,112 @@ function ReviewPertanyaanExcel() {
     }
   };
 
-  const handleOpenDialog = (item, sectionCode) => {
-    setSelectedItem({ ...item, sectionCode });
-    setKomentarReviewer(
-      item.reviewer?.comment ||
-        (item.komentarReviewer === "Belum diisi"
-          ? ""
-          : item.komentarReviewer || "")
-    );
+  const handleOpenDialog = (question) => {
+    setSelectedItem(question);
+    setKomentarReviewer(question.reviewerComment || "");
     setDialogOpen(true);
   };
 
-  const handleSimpanKomentar = () => {
-    if (!selectedItem) return;
+  const handleSimpanKomentar = async () => {
+    if (!selectedItem || !selectedItem.answerId) {
+      toast.error("Pertanyaan belum dijawab");
+      return;
+    }
 
     const trimmedComment = komentarReviewer.trim();
+    if (!trimmedComment) {
+      toast.error("Komentar tidak boleh kosong");
+      return;
+    }
 
-    setReviewData((prev) => ({
-      ...prev,
-      sections: prev.sections.map((section) => {
-        if (section.code !== selectedItem.sectionCode) return section;
-        return {
-          ...section,
-          items: section.items.map((item) => {
-            if (item.id !== selectedItem.id) return item;
-            const updatedComment =
-              trimmedComment !== "" ? trimmedComment : item.komentarReviewer;
+    setIsSaving(true);
+    try {
+      await auditService.reviewExcelAnswer(selectedItem.answerId, {
+        reviewer_comment: trimmedComment,
+        is_review: true,
+      });
 
-            return {
-              ...item,
-              komentarReviewer: updatedComment,
-              statusReview:
-                item.statusReview === "sudah" || trimmedComment === ""
-                  ? item.statusReview
-                  : "sudah",
-            };
-          }),
-        };
-      }),
-    }));
-    setDialogOpen(false);
-    setSelectedItem(null);
-    setKomentarReviewer("");
+      toast.success("Komentar berhasil disimpan");
+      await refetchQuestions();
+
+      setDialogOpen(false);
+      setSelectedItem(null);
+      setKomentarReviewer("");
+    } catch (error) {
+      console.error("Error saving review comment:", error);
+      toast.error("Gagal menyimpan komentar");
+    } finally {
+      setIsSaving(false);
+    }
   };
 
-  const handleTandaiDireview = (item, sectionCode) => {
-    setReviewData((prev) => ({
-      ...prev,
-      sections: prev.sections.map((section) => {
-        if (section.code !== sectionCode) return section;
-        return {
-          ...section,
-          items: section.items.map((row) =>
-            row.id === item.id ? { ...row, statusReview: "sudah" } : row
-          ),
+  const handleTandaiDireview = async (question) => {
+    if (!question.answerId) {
+      toast.error("Pertanyaan belum dijawab");
+      return;
+    }
+
+    try {
+      await auditService.reviewExcelAnswer(question.answerId, {
+        reviewer_comment: question.reviewerComment || "-",
+        is_review: true,
+      });
+
+      toast.success("Berhasil menandai sudah direview");
+      await refetchQuestions();
+    } catch (error) {
+      console.error("Error marking as reviewed:", error);
+      toast.error("Gagal menandai sudah direview");
+    }
+  };
+
+  // Transform questions to sections format for ReviewExcelAuditTable
+  const reviewData = {
+    sections: questions.reduce((acc, question) => {
+      const aspectName = question.aspect || "Tanpa Aspek";
+      let section = acc.find((s) => s.title === aspectName);
+
+      if (!section) {
+        section = {
+          code: aspectName.toLowerCase().replace(/\s+/g, "-"),
+          title: aspectName,
+          items: [],
         };
-      }),
-    }));
+        acc.push(section);
+      }
+
+      // Map conformity: yes → Ya, no → Tidak
+      const kesesuaianDisplay =
+        question.kesesuaian === "yes"
+          ? "Ya"
+          : question.kesesuaian === "no"
+          ? "Tidak"
+          : question.kesesuaian || "Belum Diisi";
+
+      section.items.push({
+        id: question.id,
+        itemAudit: question.itemAudit || "-",
+        buktiObjektif: question.buktiObjektif || "Belum diisi",
+        kesesuaian: kesesuaianDisplay,
+        catatanEditor: question.catatanAuditor || "Belum diisi",
+        komentarReviewer: question.reviewerComment || "Belum diisi",
+        statusReview: question.isReview ? "sudah" : "belum",
+        // Reviewer info
+        reviewer: question.reviewerName
+          ? {
+              name: question.reviewerName,
+              date: question.reviewedAt
+                ? new Date(question.reviewedAt).toLocaleDateString("id-ID")
+                : "-",
+              comment: question.reviewerComment || "-",
+            }
+          : null,
+        // Keep original question data
+        ...question,
+      });
+
+      return acc;
+    }, []),
   };
 
   return (
@@ -183,67 +221,80 @@ function ReviewPertanyaanExcel() {
       <div className="flex gap-6">
         {/* Left Content */}
         <div className="flex-1 space-y-6">
+          {/* Loading State */}
+          {(isLoadingExcelChecklists || isLoadingQuestions) && (
+            <div className="text-center py-8">
+              <p className="text-gray-dark">Memuat data...</p>
+            </div>
+          )}
+
           {/* Info Header */}
-          <div className="grid grid-cols-2 gap-4">
-            <div>
-              <p className="small text-gray-dark mb-1">Jenis Checklist</p>
-              <p className="body-medium text-[#2B7FFF]">
-                Fully Redundant Critical Systems
+          {!isLoadingExcelChecklists && (
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <p className="small text-gray-dark mb-1">Jenis Checklist</p>
+                <p className="body-medium text-[#2B7FFF]">
+                  {excelChecklists[0]?.checklistName || "Excel Checklist"}
+                </p>
+              </div>
+              <div>
+                <p className="small text-gray-dark mb-1">Total Pertanyaan</p>
+                <p className="body-medium text-[#2B7FFF]">
+                  {isLoadingQuestions ? "Loading..." : questions.length || 0}
+                </p>
+              </div>
+            </div>
+          )}
+
+          {!isLoadingExcelChecklists && !excelChecklistId && (
+            <div className="text-center py-8">
+              <p className="text-red-600">
+                Excel checklist tidak ditemukan untuk checklist ini.
               </p>
             </div>
-            <div>
-              <p className="small text-gray-dark mb-1">Jenis Checklist Excel</p>
-              <p className="body-medium text-[#2B7FFF]">
-                Fully Redundant Critical Systems
-              </p>
-            </div>
-          </div>
+          )}
 
           {/* Review Excel Table */}
-          <ReviewExcelAuditTable
-            data={reviewData}
-            onKomentarClick={handleOpenDialog}
-            onTandaiDireview={handleTandaiDireview}
-          />
+          {!isLoadingExcelChecklists &&
+            excelChecklistId &&
+            !isLoadingQuestions && (
+              <ReviewExcelAuditTable
+                data={reviewData}
+                onKomentarClick={handleOpenDialog}
+                onTandaiDireview={handleTandaiDireview}
+              />
+            )}
         </div>
 
         {/* Navigator Sidebar */}
         <div className="w-80 shrink-0">
           <div className="border rounded-lg p-4 bg-white sticky top-6">
-            <h3 className="body-medium text-navy mb-4">
-              Navigator Checklist Excel
-            </h3>
+            <h3 className="body-medium text-navy mb-4">Navigator Aspek</h3>
 
-            <div className="space-y-2">
-              {checklistExcel.map((checklist) => (
-                <div key={checklist.id}>
-                  <button
-                    onClick={() => toggleChecklist(checklist.id)}
-                    className="w-full flex items-center justify-between p-2 hover:bg-state rounded transition-colors text-left"
-                  >
-                    <div className="flex items-center gap-2 flex-1">
-                      {checklist.expanded && (
-                        <div className="w-2 h-2 rounded-full bg-[#28A745] shrink-0" />
-                      )}
-                      <span
-                        className={`body ${
-                          checklist.expanded
-                            ? "text-navy font-medium"
-                            : "text-gray-dark"
-                        }`}
-                      >
-                        {checklist.name}
+            {isLoadingQuestions && (
+              <p className="text-gray-dark text-sm">Memuat aspek...</p>
+            )}
+
+            {!isLoadingQuestions && (
+              <div className="space-y-2">
+                {reviewData.sections.map((section) => (
+                  <div key={section.code} className="p-2 rounded bg-gray-50">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-[#28A745] shrink-0" />
+                      <span className="body text-navy font-medium">
+                        {section.title}
                       </span>
                     </div>
-                    {checklist.expanded ? (
-                      <ChevronUp className="w-4 h-4 text-gray-dark shrink-0" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-gray-dark shrink-0" />
-                    )}
-                  </button>
-                </div>
-              ))}
-            </div>
+                    <p className="text-sm text-gray-dark mt-1 ml-4">
+                      {section.items.length} pertanyaan
+                    </p>
+                  </div>
+                ))}
+                {reviewData.sections.length === 0 && (
+                  <p className="text-gray-dark text-sm">Tidak ada pertanyaan</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -265,15 +316,21 @@ function ReviewPertanyaanExcel() {
             <div className="space-y-3">
               <div>
                 <p className="small text-gray-dark mb-1">Bukti Objektif</p>
-                <p className="body text-navy">{selectedItem?.buktiObjektif}</p>
+                <p className="body text-navy">
+                  {selectedItem?.buktiObjektif || "-"}
+                </p>
               </div>
               <div>
                 <p className="small text-gray-dark mb-1">Kesesuaian</p>
-                <p className="body text-navy">{selectedItem?.kesesuaian}</p>
+                <p className="body text-navy">
+                  {selectedItem?.kesesuaian || "-"}
+                </p>
               </div>
               <div>
-                <p className="small text-gray-dark mb-1">Catatan Editor</p>
-                <p className="body text-navy">{selectedItem?.catatanEditor}</p>
+                <p className="small text-gray-dark mb-1">Catatan Auditor</p>
+                <p className="body text-navy">
+                  {selectedItem?.catatanAuditor || "-"}
+                </p>
               </div>
             </div>
 
@@ -307,6 +364,7 @@ function ReviewPertanyaanExcel() {
                 value={komentarReviewer}
                 onChange={(e) => setKomentarReviewer(e.target.value)}
                 className="min-h-[100px] resize-none"
+                disabled={isSaving}
               />
             </div>
 
@@ -316,17 +374,20 @@ function ReviewPertanyaanExcel() {
                 onClick={() => {
                   setDialogOpen(false);
                   setKomentarReviewer("");
+                  setSelectedItem(null);
                 }}
                 variant="outline"
                 className="rounded-lg"
+                disabled={isSaving}
               >
                 Batal
               </Button>
               <Button
                 onClick={handleSimpanKomentar}
                 className="rounded-lg bg-navy hover:bg-navy/90 text-white"
+                disabled={isSaving}
               >
-                Simpan Komentar
+                {isSaving ? "Menyimpan..." : "Simpan Komentar"}
               </Button>
             </div>
           </div>
