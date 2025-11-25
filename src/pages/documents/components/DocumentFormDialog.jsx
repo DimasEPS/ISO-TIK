@@ -160,13 +160,12 @@ export function DocumentFormDialog({
               <p className="small text-gray-dark">Tanggal Unggah</p>
               <div className="relative">
                 <input
-                  type="text"
+                  type="date"
                   className="h-12 w-full rounded-lg border border-[#E2E8F0] bg-[#F8FAFC] px-4 text-sm text-navy focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#9BB2FF]"
                   placeholder="27/4/2025"
                   value={formData.tanggalTerbit}
                   onChange={handleInputChange("tanggalTerbit")}
                 />
-                <CalendarIcon className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400" />
               </div>
             </div>
           </div>

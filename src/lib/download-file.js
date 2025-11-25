@@ -1,3 +1,5 @@
+import { getApiBaseUrl } from "@/lib/api-client"
+
 const deriveFileName = (fileUrl, fallback = "dokumen") => {
   if (fileUrl && typeof fileUrl === "string") {
     try {
@@ -17,18 +19,38 @@ const deriveFileName = (fileUrl, fallback = "dokumen") => {
   return fallback
 }
 
+const ensureApiHost = (fileUrl) => {
+  try {
+    const resolved = new URL(fileUrl, window.location.origin)
+    const apiBase = new URL(getApiBaseUrl())
+
+    if (!resolved.port && resolved.hostname === apiBase.hostname) {
+      resolved.port = apiBase.port
+    }
+
+    if (resolved.hostname === "localhost" && apiBase.hostname === "localhost") {
+      resolved.port = apiBase.port
+    }
+
+    return resolved.toString()
+  } catch {
+    return fileUrl
+  }
+}
+
 export const downloadDocumentFile = async ({ fileUrl, fileName }) => {
   if (!fileUrl) {
     throw new Error("File dokumen tidak ditemukan.")
   }
 
   try {
+    const normalizedUrl = ensureApiHost(fileUrl)
     const token =
       typeof localStorage !== "undefined"
         ? localStorage.getItem("iso_tik_token")
         : null
 
-    const response = await fetch(fileUrl, {
+    const response = await fetch(normalizedUrl, {
       credentials: "include",
       headers: token
         ? {
@@ -54,7 +76,7 @@ export const downloadDocumentFile = async ({ fileUrl, fileName }) => {
   } catch (fetchError) {
     console.error("Gagal mengambil file secara langsung, fallback ke navigasi biasa.", fetchError)
     const anchor = document.createElement("a")
-    anchor.href = fileUrl
+    anchor.href = ensureApiHost(fileUrl)
     anchor.download = fileName?.trim() || deriveFileName(fileUrl)
     anchor.style.display = "none"
     anchor.rel = "noopener noreferrer"

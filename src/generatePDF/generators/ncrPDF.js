@@ -410,6 +410,7 @@ export const buildNCRDocumentPDF = async (ncrData, options = {}) => {
     align: 'center',
   });
   y += 8;
+  const mainBorderY = y;
 
   const leftHeaderWidth = 60;
   const rightHeaderWidth = contentWidth - leftHeaderWidth;
@@ -618,6 +619,10 @@ export const buildNCRCasePDFDocument = async (caseData, options = {}) => {
     }
   }
 
+const mainBorderHeight = y - mainBorderY + 4;
+doc.rect(startX, mainBorderY, contentWidth, mainBorderHeight);
+
+
   const totalPages = doc.internal.getNumberOfPages();
   for (let i = 1; i <= totalPages; i++) {
     doc.setPage(i);
@@ -640,6 +645,323 @@ export const downloadNCRCasePDF = async (caseData, options = {}) => {
 
 export const getNCRCasePDFPreview = async (caseData, options = {}) => {
   const doc = await buildNCRCasePDFDocument(caseData, { ...options, autoSave: false });
+  const blob = doc.output('blob');
+  const url = URL.createObjectURL(blob);
+  const dispose = () => URL.revokeObjectURL(url);
+  return { url, dispose, doc };
+};
+
+/**
+ * Generate multi-page PDF for NCR Document with all cases
+ * Each case gets its own page
+ */
+export const buildNCRDocumentWithAllCasesPDF = async (documentData, casesData, options = {}) => {
+  const {
+    autoSave = false,
+    filename = `ncr-document-${documentData?.id || documentData?.document_number || 'dokumen'}.pdf`,
+  } = options;
+
+  if (!casesData || casesData.length === 0) {
+    throw new Error('Tidak ada kasus yang ditemukan untuk dokumen ini.');
+  }
+
+  const doc = new jsPDF({
+    orientation: 'portrait',
+    unit: PDF_CONFIG.unit,
+    format: PDF_CONFIG.format,
+  });
+
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const totalCases = casesData.length;
+
+  // Generate a page for each case
+  for (let caseIndex = 0; caseIndex < totalCases; caseIndex++) {
+    const caseItem = casesData[caseIndex];
+    
+    // Add new page for each case except the first
+    if (caseIndex > 0) {
+      doc.addPage();
+    }
+
+    const { margins } = PDF_CONFIG;
+    const contentWidth = pageWidth - margins.left - margins.right;
+    let y = margins.top;
+    const startX = margins.left;
+
+    doc.setDrawColor(0, 0, 0);
+    doc.setLineWidth(0.5);
+
+    // Title outside main border
+    doc.setFontSize(14);
+    doc.setFont('helvetica', 'bold');
+    doc.text('LAPORAN KETIDAKSESUAIAN', pageWidth / 2, y, {
+      align: 'center',
+    });
+    y += 8;
+
+    // Draw main outer border
+    const mainBorderY = y;
+    const mainBorderHeight = pageHeight - mainBorderY - 15; // Leave space for footer
+    const mainBorderBottom = mainBorderY + mainBorderHeight;
+    doc.rect(startX, mainBorderY, contentWidth, mainBorderHeight);
+
+    // Calculate fixed position for final signature row at bottom
+    const finalRowHeight = 12;
+    const finalSignatureY = mainBorderBottom - finalRowHeight;
+
+    // Reset y inside the border (no gap)
+    y = mainBorderY;
+
+    const drawInfoRow = (cells, minHeight = 10) => {
+      const widths = cells.map((cell) => cell.width || contentWidth / cells.length);
+      const linesPerCell = cells.map((cell, index) =>
+        doc.splitTextToSize(cell.value || '-', widths[index] - 4)
+      );
+      const maxLines = Math.max(
+        minHeight,
+        ...linesPerCell.map((lines) => lines.length * 4 + 6)
+      );
+      const rowHeight = Math.max(minHeight, maxLines);
+      
+      let cellX = startX;
+      cells.forEach((cell, index) => {
+        const cellWidth = widths[index];
+        doc.rect(cellX, y, cellWidth, rowHeight);
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'bold');
+        doc.text(cell.label, cellX + 2, y + 4);
+        doc.setFont('helvetica', 'normal');
+        doc.setFontSize(8);
+        const textLines = linesPerCell[index];
+        doc.text(textLines, cellX + 2, y + 8);
+        cellX += cellWidth;
+      });
+
+      y += rowHeight;
+    };
+
+    const drawParagraphSection = (title, content, maxY = null, drawBottomBorder = true) => {
+      const lines = doc.splitTextToSize(content || '-', contentWidth - 8);
+      const contentHeight = Math.max(20, lines.length * 4);
+      let sectionHeight = contentHeight + 8;
+      let isLimited = false;
+      
+      // Check if we need to limit height
+      if (maxY && (y + sectionHeight) > maxY) {
+        sectionHeight = maxY - y;
+        isLimited = true;
+      }
+      
+      // Draw border based on parameters
+      if (isLimited || !drawBottomBorder) {
+        // Draw three sides only (top, left, right)
+        doc.line(startX, y, startX + contentWidth, y); // top
+        doc.line(startX, y, startX, y + sectionHeight); // left
+        doc.line(startX + contentWidth, y, startX + contentWidth, y + sectionHeight); // right
+      } else {
+        // Draw complete border
+        doc.rect(startX, y, contentWidth, sectionHeight);
+      }
+      
+      // Draw title background line
+      doc.line(startX, y + 6, startX + contentWidth, y + 6);
+      
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text(title, startX + 2, y + 4);
+      
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(8);
+      doc.text(lines, startX + 4, y + 10);
+      y += sectionHeight;
+    };
+
+    const drawSignatureRow = () => {
+      const leftWidth = contentWidth * 0.5;
+      const rightWidth = contentWidth - leftWidth;
+      const rowHeight = 12;
+
+      doc.rect(startX, y, leftWidth, rowHeight);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text('Nama Auditor :', startX + 2, y + 4);
+      doc.setFont('helvetica', 'normal');
+      doc.text(caseItem.auditor || '-', startX + 2, y + 8);
+      doc.text('TTD', startX + leftWidth - 15, y + rowHeight - 2);
+
+      doc.rect(startX + leftWidth, y, rightWidth, rowHeight);
+      doc.setFont('helvetica', 'bold');
+      doc.text('TGL. PENYELESAIAN', startX + leftWidth + 2, y + 4);
+      doc.setFont('helvetica', 'normal');
+      doc.text(formatDate(caseItem.tglPenyelesaian) || '-', startX + leftWidth + 2, y + 8);
+
+      y += rowHeight;
+    };
+
+    // Header section - NCR info inside main border
+    const leftHeaderWidth = 60;
+    const rightHeaderWidth = contentWidth - leftHeaderWidth;
+    const headerRowHeight = 9;
+    
+    doc.rect(startX, y, leftHeaderWidth, headerRowHeight * 2);
+    doc.setFontSize(9);
+    doc.setFont('helvetica', 'bold');
+    doc.text('NON CONFORMITY', startX + leftHeaderWidth / 2, y + 5, {
+      align: 'center',
+    });
+    doc.text('REPORT (NCR)', startX + leftHeaderWidth / 2, y + 13, {
+      align: 'center',
+    });
+
+    const topHeaderCells = [
+      { label: 'NO. NCR', value: documentData?.document_number || documentData?.ncr_number || caseItem.ncrNumber || '-' },
+      { label: 'HALAMAN', value: String(caseIndex + 1) },
+      { label: 'DARI', value: String(totalCases) },
+    ];
+    const headerColWidth = rightHeaderWidth / topHeaderCells.length;
+    topHeaderCells.forEach((cell, index) => {
+      const cellX = startX + leftHeaderWidth + index * headerColWidth;
+      doc.rect(cellX, y, headerColWidth, headerRowHeight);
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'bold');
+      doc.text(cell.label, cellX + 2, y + 3);
+      doc.setFont('helvetica', 'normal');
+      doc.setFontSize(9);
+      doc.text(`: ${cell.value || '-'}`, cellX + 2, y + 7);
+    });
+
+    const secondRowY = y + headerRowHeight;
+    doc.rect(startX + leftHeaderWidth, secondRowY, rightHeaderWidth, headerRowHeight);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('TANGGAL', startX + leftHeaderWidth + 2, secondRowY + 3);
+    doc.setFont('helvetica', 'normal');
+    doc.setFontSize(9);
+    doc.text(`: ${formatDate(caseItem.date) || '-'}`, startX + leftHeaderWidth + 2, secondRowY + 7);
+
+    y += headerRowHeight * 2;
+
+    // Info rows
+    drawInfoRow([
+      { label: 'BAGIAN / LOKASI', value: caseItem.bagianLokasi || '-', width: contentWidth * 0.35 },
+      { label: 'STANDAR REFERENSI', value: caseItem.standarReferensi || 'STANDAR ISO : 27001:2022', width: contentWidth * 0.45 },
+      { label: 'Klausul :', value: caseItem.klausul || '-', width: contentWidth * 0.2 },
+    ]);
+
+    drawParagraphSection('URAIAN KETIDAKSESUAIAN (diisi Auditor)', formatListContent(caseItem.uraianKetidaksesuaian, { fallback: 'Belum ada uraian ketidaksesuaian.' }), null, false);
+
+    // Kategori Temuan Audit (tanpa border dan tanpa garis atas)
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('Kategori Temuan Audit', startX + 2, y + 6);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`: ${caseItem.kategoriTemuan || '-'}`, startX + 2, y + 10);
+    y += 12;
+
+    // Personnel section - horizontal layout (3 columns per row)
+    const personnelRowHeight = 10;
+    const col1Width = contentWidth * 0.3; // Label column
+    const col2Width = contentWidth * 0.5; // Name column
+    const col3Width = contentWidth * 0.2; // TTD column
+    
+    // Auditor row
+    doc.rect(startX, y, col1Width, personnelRowHeight);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('AUDITOR / PELAPOR', startX + 2, y + 6);
+    
+    doc.rect(startX + col1Width, y, col2Width, personnelRowHeight);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Nama : ${caseItem.auditor || '-'}`, startX + col1Width + 2, y + 6);
+    
+    doc.rect(startX + col1Width + col2Width, y, col3Width, personnelRowHeight);
+    doc.text('TTD', startX + col1Width + col2Width + 2, y + 6);
+    
+    y += personnelRowHeight;
+    
+    // Auditee row
+    doc.rect(startX, y, col1Width, personnelRowHeight);
+    doc.setFont('helvetica', 'bold');
+    doc.text('AUDITEE / TERLAPOR', startX + 2, y + 6);
+    
+    doc.rect(startX + col1Width, y, col2Width, personnelRowHeight);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Nama : ${caseItem.auditee || '-'}`, startX + col1Width + 2, y + 6);
+    
+    doc.rect(startX + col1Width + col2Width, y, col3Width, personnelRowHeight);
+    doc.text('TTD', startX + col1Width + col2Width + 2, y + 6);
+
+    y += personnelRowHeight;
+    
+    const targetDateHeight = 10;
+    doc.rect(startX, y, contentWidth, targetDateHeight);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('TGL. TARGET PERBAIKAN (diisi Auditee)', startX + 2, y + 4);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`: ${formatDate(caseItem.targetPerbaikan) || '-'}`, startX + 2, y + 8);
+    y += targetDateHeight;
+
+    drawParagraphSection('ANALISA PENYEBAB KETIDAKSESUAIAN (diisi Auditee)', formatListContent(caseItem.analisaPenyebab, { fallback: 'Belum ada analisa penyebab.' }));
+    drawParagraphSection('KOREKSI (diisi Auditee)', formatListContent(caseItem.koreksi, { fallback: 'Belum ada rencana koreksi.' }));
+    drawParagraphSection('TINDAKAN KOREKSI (diisi Auditee)', formatListContent(caseItem.tindakanKoreksi, { fallback: 'Belum ada tindakan koreksi.' }));
+
+    drawSignatureRow();
+    
+    // Draw verification section but limit it to not exceed final signature area
+    const verificationMaxY = finalSignatureY;
+    drawParagraphSection('VERIFIKASI TINDAKAN PERBAIKAN (diisi Auditor)', formatListContent(caseItem.verifikasiTindakan, { numbered: false, fallback: 'Belum ada catatan verifikasi.' }), verificationMaxY);
+
+    // Draw final signature row at fixed bottom position
+    const colA = contentWidth * 0.2;
+    const colB = contentWidth * 0.5;
+    const colC = contentWidth - colA - colB;
+
+    doc.rect(startX, finalSignatureY, colA, finalRowHeight);
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(8);
+    doc.text('AUDITOR', startX + 2, finalSignatureY + 7);
+
+    doc.rect(startX + colA, finalSignatureY, colB, finalRowHeight);
+    doc.setFont('helvetica', 'normal');
+    doc.text(`Nama : ${caseItem.auditorVerifier || caseItem.auditor || '-'}`, startX + colA + 2, finalSignatureY + 5);
+    doc.text('TTD', startX + colA + colB - 15, finalSignatureY + finalRowHeight - 2);
+
+    doc.rect(startX + colA + colB, finalSignatureY, colC, finalRowHeight);
+    doc.text(`TANGGAL : ${formatDate(caseItem.tglPenyelesaian) || '-'}`, startX + colA + colB + 2, finalSignatureY + 7);
+  }
+
+  // Add footer with page numbers
+  const totalPages = doc.internal.getNumberOfPages();
+  for (let i = 1; i <= totalPages; i++) {
+    doc.setPage(i);
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'normal');
+    doc.text(
+      `Halaman ${i} dari ${totalPages}`,
+      pageWidth / 2,
+      pageHeight - 10,
+      { align: 'center' }
+    );
+  }
+
+  if (autoSave) {
+    doc.save(filename);
+  }
+
+  return doc;
+};
+
+export const downloadNCRDocumentWithAllCasesPDF = async (documentData, casesData, options = {}) => {
+  const doc = await buildNCRDocumentWithAllCasesPDF(documentData, casesData, { ...options, autoSave: false });
+  const filename = options.filename || `ncr-document-${documentData?.document_number || documentData?.id || 'dokumen'}.pdf`;
+  doc.save(filename);
+  return doc;
+};
+
+export const getNCRDocumentWithAllCasesPDFPreview = async (documentData, casesData, options = {}) => {
+  const doc = await buildNCRDocumentWithAllCasesPDF(documentData, casesData, { ...options, autoSave: false });
   const blob = doc.output('blob');
   const url = URL.createObjectURL(blob);
   const dispose = () => URL.revokeObjectURL(url);

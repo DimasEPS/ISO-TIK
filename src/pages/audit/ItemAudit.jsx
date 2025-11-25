@@ -12,7 +12,9 @@ import {
   ItemAuditDialog,
   DeleteItemAuditDialog,
 } from "@/components/admin/audit/ItemAuditDialog";
-import { itemAuditData } from "@/mocks/tableData";
+import { useExcelQuestions } from "./hooks/useExcelQuestions";
+import { auditService } from "@/services/auditService";
+import { useQuery } from "@tanstack/react-query";
 
 const PAGINATE_OPTIONS = [10, 20, 50, 100];
 
@@ -24,9 +26,11 @@ function ItemAuditCard({ item, onEdit, onDelete }) {
           <p className="text-navy text-base leading-relaxed">
             {item.itemAudit}
           </p>
-          <p className="text-sm text-gray-600">
-            Aspek: <span className="font-medium">{item.aspekName}</span>
-          </p>
+          {item.aspect && (
+            <p className="text-sm text-gray-600">
+              Aspek: <span className="font-medium">{item.aspect}</span>
+            </p>
+          )}
         </div>
         <div className="flex gap-2 shrink-0">
           <button
@@ -76,38 +80,63 @@ export default function ItemAudit() {
       urlDetail: "/admin/profil",
     },
   });
-  const location = useLocation();
-  const { id: checklistExcelId } = useParams();
 
-  const { checklistAuditName, checklistExcelName } = location.state || {
-    checklistAuditName: "Pencapaian Target Uptime 99,995%",
-    checklistExcelName: "Fully Redundant Critical Systems",
-  };
+  const location = useLocation();
+  const { id: excelChecklistId } = useParams();
+
+  // Get excel checklist detail untuk display
+  const { data: excelChecklistDetail, isLoading: isLoadingExcelChecklist } =
+    useQuery({
+      queryKey: ["audit-excel-checklist", excelChecklistId],
+      queryFn: () => auditService.getExcelChecklist(excelChecklistId),
+      enabled: !!excelChecklistId,
+    });
+
+  const checklistExcelName =
+    excelChecklistDetail?.excel_checklist_name ||
+    location.state?.checklistExcelName ||
+    "Loading...";
+  const checklistAuditName = location.state?.checklistAuditName || "Loading...";
 
   const [searchQuery, setSearchQuery] = useState("");
   const [perPage, setPerPage] = useState(10);
   const [activePage, setActivePage] = useState(1);
-  const [itemList, setItemList] = useState([]);
 
   // Dialog states
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
 
-  // Load item data based on checklistExcelId
+  // Use excel questions hook
+  const {
+    questions,
+    isLoading,
+    createQuestion,
+    updateQuestion,
+    deleteQuestion,
+    isCreating,
+    isUpdating,
+    isDeleting,
+    refetch,
+  } = useExcelQuestions(excelChecklistId);
+
+  // Refetch when dialog closes after successful operation
   useEffect(() => {
-    const filtered = itemAuditData.filter(
-      (item) => item.checklistExcelId === parseInt(checklistExcelId)
-    );
-    setItemList(filtered);
-  }, [checklistExcelId]);
+    if (!isEditDialogOpen && !isDeleteDialogOpen) {
+      refetch();
+    }
+  }, [isEditDialogOpen, isDeleteDialogOpen, refetch]);
 
   const filteredData = useMemo(() => {
-    if (!searchQuery) return itemList;
-    return itemList.filter((item) =>
-      item.itemAudit.toLowerCase().includes(searchQuery.toLowerCase())
+    if (!questions || !Array.isArray(questions)) return [];
+    if (!searchQuery) return questions;
+    return questions.filter(
+      (item) =>
+        item.itemAudit.toLowerCase().includes(searchQuery.toLowerCase()) ||
+        (item.aspect &&
+          item.aspect.toLowerCase().includes(searchQuery.toLowerCase()))
     );
-  }, [itemList, searchQuery]);
+  }, [questions, searchQuery]);
 
   const totalData = filteredData.length;
   const totalPages = Math.max(1, Math.ceil(totalData / perPage));
@@ -123,15 +152,12 @@ export default function ItemAudit() {
     setActivePage(1);
   }, []);
 
-  const handleAddItem = (formData) => {
-    const newItem = {
-      id: Math.max(...itemList.map((i) => i.id), 0) + 1,
-      checklistExcelId: parseInt(checklistExcelId),
-      aspekId: formData.aspekId,
-      aspekName: formData.aspekName,
+  const handleAddItem = async (formData) => {
+    await createQuestion({
+      aspect: formData.aspect,
       itemAudit: formData.itemAudit,
-    };
-    setItemList([...itemList, newItem]);
+      excelChecklistId: excelChecklistId,
+    });
   };
 
   const handleEdit = (item) => {
@@ -139,19 +165,12 @@ export default function ItemAudit() {
     setIsEditDialogOpen(true);
   };
 
-  const handleEditItem = (formData) => {
-    setItemList(
-      itemList.map((i) =>
-        i.id === selectedItem.id
-          ? {
-              ...i,
-              aspekId: formData.aspekId,
-              aspekName: formData.aspekName,
-              itemAudit: formData.itemAudit,
-            }
-          : i
-      )
-    );
+  const handleEditItem = async (formData) => {
+    await updateQuestion({
+      id: selectedItem.id,
+      aspect: formData.aspect,
+      itemAudit: formData.itemAudit,
+    });
     setIsEditDialogOpen(false);
     setSelectedItem(null);
   };
@@ -161,11 +180,22 @@ export default function ItemAudit() {
     setIsDeleteDialogOpen(true);
   };
 
-  const handleConfirmDelete = () => {
-    setItemList(itemList.filter((i) => i.id !== selectedItem.id));
+  const handleConfirmDelete = async () => {
+    await deleteQuestion(selectedItem.id);
     setIsDeleteDialogOpen(false);
     setSelectedItem(null);
   };
+
+  if (isLoadingExcelChecklist || isLoading) {
+    return (
+      <div className="space-y-4">
+        <Breadcrumb />
+        <div className="text-center py-12">
+          <p className="text-gray-dark">Loading...</p>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-4">
@@ -198,13 +228,20 @@ export default function ItemAudit() {
           </InputGroupAddon>
         </InputGroup>
 
-        <ItemAuditDialog mode="add" onSave={handleAddItem} />
+        <ItemAuditDialog
+          mode="add"
+          excelChecklistId={excelChecklistId}
+          onSave={handleAddItem}
+          isSubmitting={isCreating}
+        />
       </div>
 
       <div className="space-y-3">
         {pagedData.length === 0 ? (
           <div className="text-center py-12 text-gray-dark">
-            <p className="body">Tidak ada item audit ditemukan</p>
+            <p className="body">
+              {isLoading ? "Memuat data..." : "Tidak ada item audit ditemukan"}
+            </p>
           </div>
         ) : (
           pagedData.map((item) => (
@@ -237,9 +274,11 @@ export default function ItemAudit() {
           key={`edit-${selectedItem.id}`}
           mode="edit"
           item={selectedItem}
+          excelChecklistId={excelChecklistId}
           open={isEditDialogOpen}
           onOpenChange={setIsEditDialogOpen}
           onSave={handleEditItem}
+          isSubmitting={isUpdating}
         />
       )}
 
@@ -249,6 +288,7 @@ export default function ItemAudit() {
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         onConfirm={handleConfirmDelete}
+        isDeleting={isDeleting}
       />
     </div>
   );

@@ -15,7 +15,27 @@ const formatUploadedAt = (timestamp) => {
   })
 }
 
-const resolveFileName = (fileUrl, fallbackCode, extension) => {
+const buildSafeFileName = (baseName = "dokumen", extension = "") => {
+  const sanitized =
+    baseName
+      ?.toString()
+      ?.trim()
+      ?.replace(/[<>:"/\\|?*\u0000-\u001F]+/g, "-")
+      ?.replace(/\s+/g, "-")
+      ?.replace(/-+/g, "-")
+      ?.replace(/^-|-$/g, "")
+      ?.toLowerCase() || "dokumen"
+
+  const normalizedExtension = extension
+    ? extension.startsWith(".")
+      ? extension
+      : `.${extension}`
+    : ""
+
+  return `${sanitized}${normalizedExtension}`
+}
+
+const resolveFileName = (fileUrl, fallbackName, extension) => {
   if (fileUrl) {
     const segments = fileUrl.split(/[\\/]+/).filter(Boolean)
     const candidate = segments[segments.length - 1]
@@ -29,11 +49,7 @@ const resolveFileName = (fileUrl, fallbackCode, extension) => {
     }
   }
 
-  if (fallbackCode && extension) {
-    return `${fallbackCode}.${extension.replace(/^\./, "")}`
-  }
-
-  return fallbackCode || ""
+  return buildSafeFileName(fallbackName || "dokumen", extension)
 }
 
 export const mapDocumentSummary = (item = {}) => {
@@ -59,7 +75,7 @@ export const mapDocumentDetail = (item = {}) => {
   return {
     ...summary,
     fileUrl,
-    fileName: resolveFileName(fileUrl, summary.noDoc, fileExtension),
+    fileName: resolveFileName(fileUrl, summary.judul || summary.noDoc, fileExtension),
     fileExtension,
     mimeType,
     penyusun: uploader.username || uploader.email || "-",

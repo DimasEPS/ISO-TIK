@@ -389,7 +389,7 @@ export function OverlayForm({
                     value={questionForm.question_code}
                     onChange={handleQuestionInputChange("question_code")}
                     placeholder="Contoh A.5.1"
-                    className="h-12 border border-transparent bg-state text-navy px-4 py-3 text-sm rounded focus:border-navy focus:outline-none"
+                    className="h-12 border border-transparent bg-state text-navy px-4 py-3 text-sm focus:border-navy focus:outline-none"
                     disabled={submittingQuestion}
                     required
                   />
@@ -511,7 +511,7 @@ export function OverlayForm({
                     value={documentForm.document_number}
                     onChange={handleDocumentInputChange("document_number")}
                     placeholder="Masukkan No Dokumen"
-                    className="rounded-lg border border-transparent bg-state text-navy h-12 px-4 py-3 placeholder:text-gray-400 focus:border-navy focus:bg-white transition-colors"
+                    className="rounded border border-transparent bg-state text-navy h-12 px-4 py-3 placeholder:text-gray-400 focus:border-navy focus:bg-white transition-colors"
                     required
                     disabled={submittingDocument}
                   />
@@ -523,7 +523,7 @@ export function OverlayForm({
                     type="date"
                     value={documentForm.publish_date}
                     onChange={handleDocumentInputChange("publish_date")}
-                    className="rounded-lg border border-transparent bg-state text-navy h-12 px-4 py-3 placeholder:text-gray-400 focus:border-navy focus:bg-white transition-colors"
+                    className="rounded border border-transparent bg-state text-navy h-12 px-4 py-3 placeholder:text-gray-400 focus:border-navy focus:bg-white transition-colors"
                     required
                     disabled={submittingDocument}
                   />
@@ -537,7 +537,7 @@ export function OverlayForm({
                   value={documentForm.title}
                   onChange={handleDocumentInputChange("title")}
                   placeholder="Masukkan Judul Dokumen"
-                  className="rounded-lg border border-transparent bg-state text-navy h-12 px-4 py-3 placeholder:text-gray-400 focus:border-navy focus:bg-white transition-colors"
+                  className="rounded border border-transparent bg-state text-navy h-12 px-4 py-3 placeholder:text-gray-400 focus:border-navy focus:bg-white transition-colors"
                   required
                   disabled={submittingDocument}
                 />
@@ -551,7 +551,7 @@ export function OverlayForm({
                     value={documentForm.revision}
                     onChange={handleDocumentInputChange("revision")}
                     placeholder="Masukkan Revisi"
-                    className="rounded-lg border border-transparent bg-state text-navy h-12 px-4 py-3 placeholder:text-gray-400 focus:border-navy focus:bg-white transition-colors"
+                    className="rounded border border-transparent bg-state text-navy h-12 px-4 py-3 placeholder:text-gray-400 focus:border-navy focus:bg-white transition-colors"
                     required
                     disabled={submittingDocument}
                   />
@@ -563,7 +563,7 @@ export function OverlayForm({
                     value={documentForm.classification}
                     onChange={handleDocumentInputChange("classification")}
                     placeholder="Masukkan Klasifikasi"
-                    className="rounded-lg border border-transparent bg-state text-navy h-12 px-4 py-3 placeholder:text-gray-400 focus:border-navy focus:bg-white transition-colors"
+                    className="rounded border border-transparent bg-state text-navy h-12 px-4 py-3 placeholder:text-gray-400 focus:border-navy focus:bg-white transition-colors"
                     disabled={submittingDocument}
                   />
                 </div>
@@ -577,7 +577,7 @@ export function OverlayForm({
                     value={documentForm.compiler_name}
                     onChange={handleDocumentInputChange("compiler_name")}
                     placeholder="Masukkan Nama Penyusun"
-                    className="rounded-lg border border-transparent bg-state text-navy h-12 px-4 py-3 placeholder:text-gray-400 focus:border-navy focus:bg-white transition-colors"
+                    className="rounded border border-transparent bg-state text-navy h-12 px-4 py-3 placeholder:text-gray-400 focus:border-navy focus:bg-white transition-colors"
                     disabled={submittingDocument}
                   />
                 </div>
@@ -588,7 +588,7 @@ export function OverlayForm({
                     value={documentForm.iso_chairman_name}
                     onChange={handleDocumentInputChange("iso_chairman_name")}
                     placeholder="Masukkan Nama Ketua Iso"
-                    className="rounded! transform transition-all duration-50 cursor-pointer bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy h-12!"
+                    className="rounded transform transition-all duration-50 cursor-pointer bg-state placeholder:text-gray-dark focus:bg-gray-light focus:border-2 focus:border-navy h-12!"
                     disabled={submittingDocument}
                   />
                 </div>
@@ -617,7 +617,7 @@ export function OverlayForm({
                       value: option.label,
                       label: option.label,
                     }))}
-                    classNameButton="w-full h-12! bg-state text-navy rounded-lg border border-transparent"
+                    classNameButton="w-full h-12! bg-state text-navy rounded border border-transparent"
                     classNameDropdown="w-[]"
                     showFunnelIcon={false}
                   />
@@ -628,7 +628,7 @@ export function OverlayForm({
                 <Button
                   type="button"
                   variant="outline"
-                  className="rounded-lg border-gray-300 text-navy"
+                  className="rounded border-gray-300 text-navy h-[43px]"
                   onClick={() => setIsDialogOpen(false)}
                   disabled={submittingDocument}
                 >
@@ -636,7 +636,7 @@ export function OverlayForm({
                 </Button>
                 <Button
                   type="submit"
-                  className="rounded-lg bg-navy px-6 text-white hover:bg-navy-hover"
+                  className="rounded bg-navy px-6 text-white hover:bg-navy-hover h-[43px]"
                   disabled={submittingDocument}
                 >
                   {submittingDocument ? "Menyimpan..." : submitLabel}

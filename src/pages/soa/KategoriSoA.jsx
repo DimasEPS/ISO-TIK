@@ -3,6 +3,7 @@ import { NavLink } from "react-router-dom"
 import { SearchIcon, Plus, FilePen, Trash2 } from "lucide-react"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Button } from "@/components/ui/button"
+import { toast } from "sonner"
 import { ChecklistCard } from "@/components/admin/audit/ChecklistCard"
 import { usePageTemplate } from "@/hooks/usePageTemplate"
 import { PaginateControls } from "@/components/admin/table"
@@ -54,15 +55,28 @@ export default function KategoriSoA() {
 
   const handleSubmitCategory = useCallback(
     async (payload, categoryId) => {
+      const trimmedPayload = {
+        code: payload?.code?.trim(),
+        name: payload?.name?.trim(),
+        description: payload?.description?.trim() || null,
+      }
+
+      if (!trimmedPayload.code || !trimmedPayload.name) {
+        toast.warning("Kode dan nama kategori wajib diisi.")
+        return
+      }
+
       try {
         if (categoryId) {
-          await updateCategory(categoryId, payload)
+          await updateCategory(categoryId, trimmedPayload)
+          toast.success("Kategori SoA berhasil diperbarui.")
         } else {
-          await createCategory(payload)
+          await createCategory(trimmedPayload)
+          toast.success("Kategori SoA berhasil ditambahkan.")
         }
       } catch (submitError) {
         console.error("Gagal menyimpan kategori SoA", submitError)
-        alert(submitError?.message ?? "Gagal menyimpan kategori SoA")
+        toast.error(submitError?.message ?? "Gagal menyimpan kategori SoA")
       }
     },
     [createCategory, updateCategory],
@@ -76,18 +90,34 @@ export default function KategoriSoA() {
       try {
         await deleteCategory(categoryId)
         setCategoryToDelete(null)
+        toast.success("Kategori SoA berhasil dihapus.")
       } catch (deleteError) {
         console.error("Gagal menghapus kategori SoA", deleteError)
-        alert(deleteError?.message ?? "Gagal menghapus kategori SoA")
+        toast.error(deleteError?.message ?? "Gagal menghapus kategori SoA")
       }
     },
     [deleteCategory],
   )
 
+  const handlePromptDeleteCategory = useCallback(
+    (category) => {
+      if (!category) {
+        setCategoryToDelete(null)
+        return
+      }
+
+      setCategoryToDelete({
+        ...category,
+        judul: category.judul || category.name || "Kategori",
+      })
+    },
+    [setCategoryToDelete],
+  )
+
   return (
     <div className="space-y-6">
-      <div className="flex flex-wrap items-center gap-4 rounded-[4px] p-4">
-        <InputGroup className="h-[56px] flex-1 w-[1355px]">
+      <div className="flex flex-wrap items-center gap-4 rounded p-4">
+        <InputGroup className="h-14 flex-1 w-[1355px]">
           <InputGroupInput
             placeholder="Cari kategori berdasarkan nama"
             value={searchValue}
@@ -104,7 +134,7 @@ export default function KategoriSoA() {
           onCategorySubmit={handleSubmitCategory}
           categorySubmitting={isCreatingCategory}
           trigger={
-            <Button className="h-[56px] gap-2 bg-navy text-white hover:bg-navy-hover w-[191px] p-[16px]">
+            <Button className="h-14 gap-2 bg-navy text-white hover:bg-navy-hover w-[191px] p-4">
               <Plus className="h-5 w-5" /> Tambah Kategori
             </Button>
           }
@@ -131,7 +161,7 @@ export default function KategoriSoA() {
               title={item.name}
               description={item.description || "-"}
               meta={
-                <span className="inline-flex items-center bg-state px-3 py-1 small rounded-[4px] text-navy">
+                <span className="inline-flex items-center bg-state px-3 py-1 small rounded text-navy">
                   Kode: {item.code || "-"}
                 </span>
               }
@@ -163,9 +193,7 @@ export default function KategoriSoA() {
                     type="button"
                     className="rounded p-2 transition-colors hover:bg-red-50"
                     title="Hapus"
-                    onClick={() =>
-                      setCategoryToDelete({ ...item, judul: item.name ?? "Kategori" })
-                    }
+                    onClick={() => handlePromptDeleteCategory(item)}
                   >
                     <Trash2 className="h-5 w-5 text-red-500" />
                   </button>
