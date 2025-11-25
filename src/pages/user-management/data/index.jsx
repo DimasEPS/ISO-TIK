@@ -98,10 +98,11 @@ export const USER_COLUMNS = [
     headerClassName: "text-left text-navy min-w-[120px] whitespace-nowrap",
     cellClassName: "text-left text-navy",
     render: (row) => {
-      const fullName = row.lastName ? `${row.fullName} ${row.lastName}` : row.fullName;
+      const fallback = [row.first_name, row.last_name].filter(Boolean).join(" ");
+      const normalized = row.fullName ?? row.full_name ?? fallback ?? row.username ?? row.email ?? "-";
       return (
         <div>
-          <p className="">{fullName}</p>
+          <p className="">{normalized}</p>
         </div>
       );
     },

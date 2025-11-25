@@ -1,4 +1,6 @@
 import { useCallback, useMemo, useState } from "react";
+import { Download, Eye, FilePen, FileText, Plus, Trash2 } from "lucide-react";
+import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
   PaginateControls,
@@ -11,8 +13,7 @@ import {
   ManualDocumentDetailDialog,
   ManualDocumentFormDialog,
 } from "@/components/admin/Manual";
-import { manualDocuments } from "@/mocks/manualDocuments";
-import { Download, Eye, FilePen, FileText, Plus, Trash2 } from "lucide-react";
+import { useManualDocuments } from "./hooks/useManualDocuments";
 
 const FILTER_OPTIONS = [
   { value: "Semua Status" },
@@ -32,36 +33,38 @@ const STATUS_STYLES = {
 };
 
 export default function ManualDocuments() {
-  const [documents, setDocuments] = useState(manualDocuments);
-  const [search, setSearch] = useState("");
-  const [statusFilter, setStatusFilter] = useState(FILTER_OPTIONS[0].value);
-  const [isStatusDropdownOpen, setIsStatusDropdownOpen] = useState(false);
-  const [perPage, setPerPage] = useState(10);
-  const [activePage, setActivePage] = useState(1);
+  const {
+    documents,
+    statusFilter,
+    setStatusFilter,
+    isFilterDropdownOpen,
+    setIsFilterDropdownOpen,
+    searchQuery,
+    setSearchQuery,
+    perPage,
+    currentPage,
+    setActivePage,
+    totalPages,
+    totalData,
+    handlePaginateChange,
+    isLoading,
+    isError,
+    error,
+    createDocument,
+    isCreating,
+    updateDocument,
+    isUpdating,
+    deleteDocument,
+    isDeleting,
+  } = useManualDocuments();
+
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [formMode, setFormMode] = useState("create");
+  const [formDocument, setFormDocument] = useState(null);
   const [isDetailOpen, setIsDetailOpen] = useState(false);
+  const [detailDocument, setDetailDocument] = useState(null);
   const [isDeleteOpen, setIsDeleteOpen] = useState(false);
-  const [selectedDoc, setSelectedDoc] = useState(null);
-
-  const buildTeamFromDoc = useCallback((doc) => {
-    const lead = doc?.leadAuditor ?? [];
-    const member = doc?.memberAuditor ?? [];
-    return [
-      ...lead.map((name) => ({
-        id: crypto.randomUUID(),
-        name,
-        role: "Lead Auditor",
-        dateAdded: doc?.tanggalDibuat ?? "",
-      })),
-      ...member.map((name) => ({
-        id: crypto.randomUUID(),
-        name,
-        role: "Member Auditor",
-        dateAdded: doc?.tanggalDibuat ?? "",
-      })),
-    ];
-  }, []);
+  const [deleteDocumentTarget, setDeleteDocumentTarget] = useState(null);
 
   const columns = useMemo(
     () => [
@@ -106,9 +109,7 @@ export default function ManualDocuments() {
         header: "Ketua Auditor",
         headerClassName: "text-left px-4 whitespace-nowrap",
         cellClassName: "text-left px-4 text-navy whitespace-nowrap",
-        render: (row) => (
-          <span title={row.ketuaAuditor}>{row.ketuaAuditor}</span>
-        ),
+        render: (row) => <span title={row.ketuaAuditor}>{row.ketuaAuditor}</span>,
       },
       {
         key: "status",
@@ -117,7 +118,7 @@ export default function ManualDocuments() {
         cellClassName: "text-center px-4",
         render: (row) => (
           <span
-            className={`inline-flex items-center justify-center rounded-lg px-3 py-1 text-xs font-medium ${
+            className={`inline-flex items-center justify-center rounded px-3 py-1 text-xs font-medium ${
               STATUS_STYLES[row.status] ??
               "bg-gray-100 text-gray-600 border border-gray-200"
             }`}
@@ -138,7 +139,7 @@ export default function ManualDocuments() {
               type="button"
               title="Lihat"
               onClick={() => {
-                setSelectedDoc(row);
+                setDetailDocument(row);
                 setIsDetailOpen(true);
               }}
             >
@@ -148,7 +149,7 @@ export default function ManualDocuments() {
               type="button"
               title="Edit"
               onClick={() => {
-                setSelectedDoc({ ...row, team: buildTeamFromDoc(row) });
+                setFormDocument(row);
                 setFormMode("edit");
                 setIsFormOpen(true);
               }}
@@ -165,9 +166,10 @@ export default function ManualDocuments() {
               type="button"
               title="Hapus"
               onClick={() => {
-                setSelectedDoc(row);
+                setDeleteDocumentTarget(row);
                 setIsDeleteOpen(true);
               }}
+              disabled={isDeleting && deleteDocumentTarget?.id === row.id}
             >
               <Trash2 className="text-red w-5 h-5 cursor-pointer" />
             </button>
@@ -175,26 +177,54 @@ export default function ManualDocuments() {
         ),
       },
     ],
-    [buildTeamFromDoc]
+    [deleteDocumentTarget?.id, isDeleting]
   );
 
-  const filteredDocuments = useMemo(() => {
-    return documents.filter((doc) => {
-      const matchesStatus =
-        statusFilter === "Semua Status" || doc.status === statusFilter;
-      const searchValue = search.toLowerCase();
-      const matchesSearch =
-        doc.judul.toLowerCase().includes(searchValue) ||
-        doc.namaPerusahaan.toLowerCase().includes(searchValue);
-      return matchesStatus && matchesSearch;
-    });
-  }, [search, statusFilter, documents]);
+  const handleSearchChange = useCallback(
+    (event) => {
+      setSearchQuery(event.target.value);
+    },
+    [setSearchQuery],
+  );
 
-  const totalPages = Math.max(1, Math.ceil(filteredDocuments.length / perPage));
-  const pagedDocuments = useMemo(() => {
-    const startIndex = (activePage - 1) * perPage;
-    return filteredDocuments.slice(startIndex, startIndex + perPage);
-  }, [filteredDocuments, activePage, perPage]);
+  const handleOpenCreateForm = useCallback(() => {
+    setFormDocument(null);
+    setFormMode("create");
+    setIsFormOpen(true);
+  }, []);
+
+  const handleFormSubmit = useCallback(
+    async (payload) => {
+      try {
+        if (formMode === "edit" && formDocument) {
+          await updateDocument(formDocument.id, payload);
+          toast.success("Checklist manual berhasil diperbarui.");
+        } else {
+          await createDocument(payload);
+          toast.success("Checklist manual berhasil ditambahkan.");
+        }
+        setIsFormOpen(false);
+        setFormDocument(null);
+      } catch (submitError) {
+        console.error("Gagal menyimpan checklist manual", submitError);
+        toast.error(submitError?.message ?? "Gagal menyimpan checklist manual.");
+        throw submitError;
+      }
+    },
+    [createDocument, formDocument, formMode, updateDocument],
+  );
+
+  const handleDeleteConfirm = useCallback(async () => {
+    if (!deleteDocumentTarget) return;
+    try {
+      await deleteDocument(deleteDocumentTarget.id);
+      toast.success("Checklist manual berhasil dihapus.");
+      setDeleteDocumentTarget(null);
+    } catch (deleteError) {
+      console.error("Gagal menghapus checklist manual", deleteError);
+      toast.error(deleteError?.message ?? "Gagal menghapus checklist manual.");
+    }
+  }, [deleteDocument, deleteDocumentTarget]);
 
   return (
     <section className="space-y-6">
@@ -203,22 +233,16 @@ export default function ManualDocuments() {
           <SearchBar
             className="flex-1"
             placeholder="Cari dokumen berdasarkan nama"
-            value={search}
-            onChange={(event) => {
-              setSearch(event.target.value);
-              setActivePage(1);
-            }}
+            value={searchQuery}
+            onChange={handleSearchChange}
             inputGroupClassName="h-14 w-full"
           />
 
           <StatusDropdown
-            isMenuOpen={isStatusDropdownOpen}
-            setIsMenuOpen={setIsStatusDropdownOpen}
+            isMenuOpen={isFilterDropdownOpen}
+            setIsMenuOpen={setIsFilterDropdownOpen}
             value={statusFilter}
-            onChange={(value) => {
-              setStatusFilter(value);
-              setActivePage(1);
-            }}
+            onChange={setStatusFilter}
             options={FILTER_OPTIONS}
             className="sm:w-[204px]"
             classNameButton="h-14 w-full bg-state"
@@ -230,110 +254,82 @@ export default function ManualDocuments() {
         <Button
           type="button"
           className="flex h-14 items-center gap-2 self-start rounded-lg bg-navy px-4 text-white hover:bg-navy/90 lg:self-auto"
-          onClick={() => {
-            setSelectedDoc(null);
-            setFormMode("create");
-            setIsFormOpen(true);
-          }}
+          onClick={handleOpenCreateForm}
         >
           <Plus className="h-4 w-4" />
           Tambah Dokumen
         </Button>
       </div>
 
-      <AdminTable
-        className="rounded-xl border border-gray-medium bg-white shadow-sm"
-        headerClassName="bg-state"
-        tableClassName="min-w-[900px]"
-        columns={columns}
-        data={pagedDocuments}
-        getRowKey={(row) => row.id}
-      />
+      {isError && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red">
+          {error?.message || "Gagal memuat checklist manual"}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="rounded-xl border border-gray-medium bg-white px-4 py-10 text-center text-gray-dark">
+          Memuat data checklist manual...
+        </div>
+      ) : (
+        <AdminTable
+          className="rounded-xl border border-gray-medium bg-white shadow-sm"
+          headerClassName="bg-state"
+          tableClassName="min-w-[900px]"
+          columns={columns}
+          data={documents}
+          getRowKey={(row) => row.id}
+        />
+      )}
 
       <PaginateControls
         perPage={perPage}
-        onPaginateChange={(value) => {
-          setPerPage(Number(value));
-          setActivePage(1);
-        }}
+        onPaginateChange={handlePaginateChange}
         paginateValue={PAGINATE_OPTIONS}
-        activePage={activePage}
+        activePage={currentPage}
         onPageChange={setActivePage}
         totalPages={totalPages}
-        totalData={filteredDocuments.length}
+        totalData={totalData}
       />
 
       <ManualDocumentFormDialog
         open={isFormOpen}
-        onOpenChange={setIsFormOpen}
-        mode={formMode}
-        initialData={selectedDoc ?? undefined}
-        onSubmit={(payload) => {
-          const teamList = payload.team ?? selectedDoc?.team ?? [];
-          const derivedLead = teamList
-            .filter((member) => member.role === "Lead Auditor")
-            .map((member) => member.name);
-          const derivedMember = teamList
-            .filter((member) => member.role !== "Lead Auditor")
-            .map((member) => member.name);
-
-          if (formMode === "edit" && selectedDoc) {
-            setDocuments((prev) =>
-              prev.map((doc) =>
-                doc.id === selectedDoc.id
-                  ? {
-                      ...doc,
-                      ...payload,
-                      team: teamList,
-                      leadAuditor: derivedLead.length
-                        ? derivedLead
-                        : doc.leadAuditor,
-                      memberAuditor: derivedMember.length
-                        ? derivedMember
-                        : doc.memberAuditor,
-                    }
-                  : doc
-              )
-            );
-          } else {
-            const nextId = Math.max(0, ...documents.map((doc) => doc.id)) + 1;
-            const createdAt =
-              payload.tanggalDibuat ?? new Date().toLocaleDateString("id-ID");
-            setDocuments((prev) => [
-              ...prev,
-              {
-                ...payload,
-                id: nextId,
-                team: teamList,
-                tanggalDibuat: createdAt,
-                leadAuditor: derivedLead,
-                memberAuditor: derivedMember,
-                ketuaAuditor: derivedLead[0] ?? payload.ketuaAuditor ?? "",
-              },
-            ]);
+        onOpenChange={(open) => {
+          setIsFormOpen(open);
+          if (!open) {
+            setFormDocument(null);
+            setFormMode("create");
           }
         }}
+        mode={formMode}
+        initialData={formDocument?.formValues ?? undefined}
+        onSubmit={handleFormSubmit}
+        submitting={formMode === "edit" ? isUpdating : isCreating}
       />
 
       <ManualDocumentDetailDialog
         open={isDetailOpen}
-        onOpenChange={setIsDetailOpen}
-        data={selectedDoc ?? undefined}
+        onOpenChange={(open) => {
+          setIsDetailOpen(open);
+          if (!open) {
+            setDetailDocument(null);
+          }
+        }}
+        data={detailDocument ?? undefined}
         onViewAnswers={() => {}}
         onFillAnswers={() => {}}
       />
 
       <ManualDocumentDeleteDialog
         open={isDeleteOpen}
-        onOpenChange={setIsDeleteOpen}
-        title={selectedDoc?.judul ?? ""}
-        onConfirm={() => {
-          if (!selectedDoc) return;
-          setDocuments((prev) =>
-            prev.filter((doc) => doc.id !== selectedDoc.id)
-          );
-          setSelectedDoc(null);
+        onOpenChange={(open) => {
+          setIsDeleteOpen(open);
+          if (!open) {
+            setDeleteDocumentTarget(null);
+          }
         }}
+        title={deleteDocumentTarget?.judul ?? ""}
+        onConfirm={handleDeleteConfirm}
       />
     </section>
   );
