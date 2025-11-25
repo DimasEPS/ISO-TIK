@@ -12,19 +12,23 @@ import {
   DeleteKategoriDialog,
 } from "@/components/admin/audit/KategoriDialog";
 import { PaginateControls } from "@/components/admin/table/PaginateControls";
-import { kategoriPertanyaanData } from "@/mocks/tableData";
 import { usePageTemplate } from "@/hooks/usePageTemplate";
+import { useAuditCategories } from "./hooks/useAuditCategories";
+import { auditService } from "@/services/auditService";
+import { useQuery } from "@tanstack/react-query";
 
 const PAGINATE_OPTIONS = [10, 20, 50, 100];
 
-function Breadcrumb() {
+function Breadcrumb({ aspekName }) {
   return (
     <nav className="flex items-center gap-2 body text-gray-dark">
       <Link to="/admin/audit/aspek" className="text-[#2B7FFF] hover:underline">
         Aspek Audit
       </Link>
       <ChevronRight className="w-4 h-4 text-gray-dark" />
-      <span className="text-[#2B7FFF] font-medium">Kategori Pertanyaan</span>
+      <span className="text-[#2B7FFF] font-medium">
+        {aspekName || "Kategori Pertanyaan"}
+      </span>
     </nav>
   );
 }
@@ -39,45 +43,69 @@ export default function KategoriPertanyaan() {
       urlDetail: "/admin/profil",
     },
   });
+
   const location = useLocation();
   const { id: aspekId } = useParams();
   const navigate = useNavigate();
 
-  const { checklistName, aspekName } = location.state || {
-    checklistName: "Pencapaian Target Uptime 99,995%",
-    aspekName: "Availability & Reliability",
-  };
+  // Get aspect detail untuk display
+  const { data: aspectDetail, isLoading: isLoadingAspect } = useQuery({
+    queryKey: ["audit-aspect", aspekId],
+    queryFn: () => auditService.getAspect(aspekId),
+    enabled: !!aspekId,
+  });
+
+  const aspekName =
+    aspectDetail?.aspect_name || location.state?.aspekName || "Loading...";
+  const checklistName = location.state?.checklistName || "Loading...";
 
   const [searchQuery, setSearchQuery] = useState("");
   const [perPage, setPerPage] = useState(10);
   const [activePage, setActivePage] = useState(1);
-  const [kategoriList, setKategoriList] = useState([]);
 
   // Dialog states
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [selectedKategori, setSelectedKategori] = useState(null);
 
-  // Load kategori data based on aspekId
+  // Use audit categories hook
+  const {
+    categories,
+    isLoading,
+    createCategory,
+    updateCategory,
+    deleteCategory,
+    isCreating,
+    isUpdating,
+    isDeleting,
+    refetch,
+  } = useAuditCategories(aspekId, {
+    enabled: !!aspekId,
+    initialSearch: searchQuery,
+    initialPage: activePage,
+    initialPerPage: perPage,
+  });
+
+  // Refetch when dialog closes after successful operation
   useEffect(() => {
-    const filtered = kategoriPertanyaanData.filter(
-      (item) => item.aspekId === parseInt(aspekId)
-    );
-    setKategoriList(filtered);
-  }, [aspekId]);
+    if (!isEditDialogOpen && !isDeleteDialogOpen) {
+      refetch();
+    }
+  }, [isEditDialogOpen, isDeleteDialogOpen, refetch]);
 
   const filteredData = useMemo(() => {
-    if (!searchQuery) return kategoriList;
-    return kategoriList.filter((item) =>
+    if (!categories || !Array.isArray(categories)) return [];
+    if (!searchQuery) return categories;
+    return categories.filter((item) =>
       item.name.toLowerCase().includes(searchQuery.toLowerCase())
     );
-  }, [kategoriList, searchQuery]);
+  }, [categories, searchQuery]);
 
   const totalData = filteredData.length;
   const totalPages = Math.max(1, Math.ceil(totalData / perPage));
   const currentPage = Math.min(activePage, totalPages);
 
-  const pagedData = useMemo(() => {
+  const currentPageData = useMemo(() => {
     const startIndex = (currentPage - 1) * perPage;
     return filteredData.slice(startIndex, startIndex + perPage);
   }, [filteredData, currentPage, perPage]);
@@ -87,15 +115,11 @@ export default function KategoriPertanyaan() {
     setActivePage(1);
   }, []);
 
-  const handleAddKategori = (formData) => {
-    const newKategori = {
-      id: kategoriList.length + 1,
-      aspekId: parseInt(aspekId),
+  const handleAddKategori = async (formData) => {
+    await createCategory({
       name: formData.name,
-      description: formData.description,
-      pertanyaanCount: 0,
-    };
-    setKategoriList([...kategoriList, newKategori]);
+      aspectId: aspekId,
+    });
   };
 
   const handleEdit = (kategori) => {
@@ -103,14 +127,14 @@ export default function KategoriPertanyaan() {
     setIsEditDialogOpen(true);
   };
 
-  const handleEditKategori = (formData) => {
-    setKategoriList(
-      kategoriList.map((k) =>
-        k.id === selectedKategori.id
-          ? { ...k, name: formData.name, description: formData.description }
-          : k
-      )
-    );
+  const handleEditKategori = async (formData) => {
+    await updateCategory({
+      categoryId: selectedKategori.id,
+      categoryData: {
+        name: formData.name,
+        aspectId: aspekId,
+      },
+    });
     setIsEditDialogOpen(false);
     setSelectedKategori(null);
   };
@@ -120,11 +144,12 @@ export default function KategoriPertanyaan() {
     setIsDeleteDialogOpen(true);
   };
 
-  const handleConfirmDelete = () => {
-    setKategoriList(kategoriList.filter((k) => k.id !== selectedKategori.id));
+  const handleConfirmDelete = async () => {
+    await deleteCategory(selectedKategori.id);
     setIsDeleteDialogOpen(false);
     setSelectedKategori(null);
   };
+
   const handleAddPertanyaan = (kategori) => {
     navigate(
       `/admin/audit/aspek/kategori/${aspekId}/pertanyaan/${kategori.id}`,
@@ -139,14 +164,24 @@ export default function KategoriPertanyaan() {
     );
   };
 
-  const handleViewPertanyaan = (kategori) => {
-    console.log("View pertanyaan for kategori:", kategori);
+  const handleViewPertanyaan = () => {
     // Navigate to pertanyaan detail page
   };
 
+  if (isLoadingAspect || isLoading) {
+    return (
+      <div className="space-y-4">
+        <Breadcrumb aspekName="Loading..." />
+        <div className="text-center py-12">
+          <p className="text-gray-dark">Loading...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4">
-      <Breadcrumb />
+      <Breadcrumb aspekName={aspekName} />
 
       <div>
         <h2 className="text-2xl font-bold text-navy mb-3">
@@ -177,16 +212,23 @@ export default function KategoriPertanyaan() {
           </InputGroupAddon>
         </InputGroup>
 
-        <KategoriDialog mode="add" onSave={handleAddKategori} />
+        <KategoriDialog
+          mode="add"
+          aspectId={aspekId}
+          onSave={handleAddKategori}
+          isSubmitting={isCreating}
+        />
       </div>
 
       <div className="space-y-3">
-        {pagedData.length === 0 ? (
+        {currentPageData.length === 0 ? (
           <div className="text-center py-12 text-gray-dark">
-            <p className="body">Tidak ada kategori ditemukan</p>
+            <p className="body">
+              {isLoading ? "Memuat data..." : "Tidak ada kategori ditemukan"}
+            </p>
           </div>
         ) : (
-          pagedData.map((kategori) => (
+          currentPageData.map((kategori) => (
             <KategoriCard
               key={kategori.id}
               kategori={kategori}
@@ -218,9 +260,11 @@ export default function KategoriPertanyaan() {
           key={`edit-${selectedKategori.id}`}
           mode="edit"
           kategori={selectedKategori}
+          aspectId={aspekId}
           open={isEditDialogOpen}
           onOpenChange={setIsEditDialogOpen}
           onSave={handleEditKategori}
+          isSubmitting={isUpdating}
         />
       )}
 
@@ -230,6 +274,7 @@ export default function KategoriPertanyaan() {
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}
         onConfirm={handleConfirmDelete}
+        isDeleting={isDeleting}
       />
     </div>
   );

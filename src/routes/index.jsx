@@ -88,7 +88,10 @@ const router = createBrowserRouter([
         ],
       },
       { path: "manual/klausa/:clauseId/sub", element: <SubKlausa /> },
-      { path: "manual/klausa/:clauseId/pertanyaan", element: <PertanyaanManual /> },
+      {
+        path: "manual/klausa/:clauseId/pertanyaan",
+        element: <PertanyaanManual />,
+      },
       { path: "dokumen", element: <DokumenPage /> },
       { path: "ncr", element: <NCR /> },
       { path: "ncr/:id/kasus", element: <CaseListPage /> },
@@ -112,7 +115,7 @@ const router = createBrowserRouter([
         element: <DaftarChecklist />,
       },
       {
-        path: "audit/dokumen/:id/aspek/:aspekId",
+        path: "audit/dokumen/:id/aspek/:checklistId",
         element: <AspekPertanyaan />,
       },
       {
