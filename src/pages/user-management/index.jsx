@@ -1,4 +1,5 @@
 import { useMemo, useState, useEffect } from "react"
+import { toast } from "sonner"
 import { useNavigate } from "react-router-dom"
 import { usePageTemplate } from "@/hooks/usePageTemplate";
 import { Button } from "@/components/ui/button"
@@ -205,7 +206,7 @@ export default function ManajemenPengguna() {
     createUserMutation.mutate(userData, {
       onSuccess: () => {
         setIsAddModalOpen(false)
-        alert("Pengguna berhasil ditambahkan!")
+        toast.success("Pengguna berhasil ditambahkan!")
         refetchUsers()
       },
       onError: (error) => {
@@ -221,7 +222,7 @@ export default function ManajemenPengguna() {
           errorMessage = `Validation errors:\n${validationErrors}`
         }
         
-        alert(`Gagal menambahkan pengguna:\n${errorMessage}`)
+        toast.error(`Gagal menambahkan pengguna: ${errorMessage}`)
       },
     })
   }
@@ -234,12 +235,12 @@ export default function ManajemenPengguna() {
       {
         onSuccess: () => {
           setIsEditModalOpen(false)
-          alert("Pengguna berhasil diperbarui!")
+          toast.success("Pengguna berhasil diperbarui!")
           refetchUsers()
         },
         onError: (error) => {
           console.error("Failed to update user:", error)
-          alert(`Gagal memperbarui pengguna: ${error.message || "Unknown error"}`)
+          toast.error(`Gagal memperbarui pengguna: ${error.message || "Unknown error"}`)
         },
       }
     )
@@ -249,19 +250,19 @@ export default function ManajemenPengguna() {
     // TODO: Implement API call to reset password when endpoint is available
     console.log("Reset password:", data)
     setIsResetPasswordModalOpen(false)
-    alert("Password berhasil direset!")
+    toast.success("Password berhasil direset!")
   }
 
   const handleConfirmDelete = (userId) => {
     deleteUserMutation.mutate(userId, {
       onSuccess: () => {
         setIsDeleteModalOpen(false)
-        alert("Pengguna berhasil dihapus!")
+        toast.success("Pengguna berhasil dihapus!")
         refetchUsers()
       },
       onError: (error) => {
         console.error("Failed to delete user:", error)
-        alert(`Gagal menghapus pengguna: ${error.message || "Unknown error"}`)
+        toast.error(`Gagal menghapus pengguna: ${error.message || "Unknown error"}`)
       },
     })
   }

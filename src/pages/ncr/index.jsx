@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useCallback } from "react"
 import { SearchIcon, Plus, Eye, FilePen, FileText, Download, Trash2, Loader2 } from "lucide-react"
+import { toast } from "sonner"
 import { InputGroup, InputGroupAddon, InputGroupInput } from "@/components/ui/input-group"
 import { Button } from "@/components/ui/button"
 import { usePageTemplate } from "@/hooks/usePageTemplate";
@@ -19,7 +20,36 @@ import { PaginationControls } from "./components/common"
 import { ChecklistCard } from "@/components/admin/audit/ChecklistCard"
 import { NCR_STATUS } from "./constants"
 import { PDFPreviewDialog } from "@/generatePDF/components"
-import { downloadNCRDocumentPDF, getNCRDocumentPDFPreview } from "@/generatePDF/generators/ncrPDF"
+import { 
+  downloadNCRDocumentWithAllCasesPDF, 
+  getNCRDocumentWithAllCasesPDFPreview 
+} from "@/generatePDF/generators/ncrPDF"
+import { ncrDocumentsService } from "@/services/ncrDocumentsService"
+
+const getDocumentTimestamp = (doc) => {
+  if (!doc) return 0
+  const candidates = [doc.created_at, doc.createdAt, doc.updated_at, doc.updatedAt]
+  for (const value of candidates) {
+    if (!value) continue
+    const timestamp = new Date(value).getTime()
+    if (!Number.isNaN(timestamp)) {
+      return timestamp
+    }
+  }
+  if (doc.id) {
+    const idNumber = Number(doc.id)
+    if (!Number.isNaN(idNumber)) {
+      return idNumber
+    }
+  }
+  if (doc.ncr_number || doc.document_number) {
+    const fallbackNumber = Number(doc.ncr_number || doc.document_number)
+    if (!Number.isNaN(fallbackNumber)) {
+      return fallbackNumber
+    }
+  }
+  return 0
+}
 
 export default function NCR() {
   usePageTemplate({
@@ -51,6 +81,15 @@ export default function NCR() {
   const pagedData = documentsData?.data || []
   const totalData = documentsData?.meta?.total || 0
   const totalPages = documentsData?.meta?.last_page || 1
+
+  const sortedDocuments = useMemo(() => {
+    if (!pagedData.length) return []
+    return [...pagedData].sort((a, b) => {
+      const diff = getDocumentTimestamp(a) - getDocumentTimestamp(b)
+      if (diff !== 0) return diff
+      return (a.title || "").localeCompare(b.title || "")
+    })
+  }, [pagedData])
 
   const [selectedNCR, setSelectedNCR] = useState(null)
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false)
@@ -95,20 +134,101 @@ export default function NCR() {
     setIsAddModalOpen(true)
   }
 
-  const handlePreviewPDF = (ncr) => {
-    setPreviewNCR(ncr)
-    setIsPreviewDialogOpen(true)
+  const handlePreviewPDF = async (ncr) => {
+    if (!ncr?.id) return
+    setGeneratingNCRId(ncr.id)
+    try {
+      // Fetch complete data from backend
+      const completeData = await ncrDocumentsService.getDocumentWithAllCasesForPDF(ncr.id)
+      
+      if (!completeData?.cases || completeData.cases.length === 0) {
+        toast.error("Tidak ada kasus dalam dokumen ini untuk di-preview.")
+        return
+      }
+
+      // Get document number with fallback
+      const docNumber = completeData.document?.document_number || 
+                        completeData.document?.ncr_number || 
+                        completeData.document?.title || 
+                        completeData.document?.id || 
+                        'NCR-DOC';
+
+      // Transform to PDF format
+      const casesForPDF = completeData.cases.map((caseItem) => ({
+        ncrNumber: docNumber,
+        date: caseItem.ncr_date,
+        bagianLokasi: caseItem.location,
+        standarReferensi: caseItem.references_standard,
+        klausul: caseItem.clause,
+        uraianKetidaksesuaian: caseItem.findings?.map(f => f.description) || [],
+        kategoriTemuan: caseItem.finding_category || 'Minor',
+        auditor: caseItem.auditor_name || caseItem.auditor_username,
+        auditee: caseItem.auditee_name || caseItem.auditee_username,
+        targetPerbaikan: caseItem.target_date,
+        analisaPenyebab: caseItem.analyses?.map(a => a.description) || [],
+        koreksi: caseItem.corrections?.map(c => c.description) || [],
+        tindakanKoreksi: caseItem.corrective_actions?.map(ca => ca.description) || [],
+        verifikasiTindakan: caseItem.verification_notes ? [caseItem.verification_notes] : [],
+        auditorVerifier: caseItem.verifier_name || caseItem.auditor_name,
+        tglPenyelesaian: caseItem.completion_date || caseItem.verification_date,
+      }))
+
+      setPreviewNCR({ document: completeData.document, cases: casesForPDF })
+      setIsPreviewDialogOpen(true)
+    } catch (error) {
+      console.error("Gagal memuat data untuk preview PDF:", error)
+      toast.error("Gagal memuat data untuk preview PDF.")
+    } finally {
+      setGeneratingNCRId(null)
+    }
   }
 
   const handleDownloadPDF = async (ncr) => {
-    if (!ncr) return
+    if (!ncr?.id) return
     setGeneratingNCRId(ncr.id)
     try {
-      await downloadNCRDocumentPDF(ncr, {
-        filename: `laporan-ncr-${ncr.ncr_number || ncr.id}.pdf`,
+      // Fetch complete data from backend
+      const completeData = await ncrDocumentsService.getDocumentWithAllCasesForPDF(ncr.id)
+      
+      if (!completeData?.cases || completeData.cases.length === 0) {
+        toast.error("Tidak ada kasus dalam dokumen ini untuk diunduh.")
+        return
+      }
+
+      // Get document number with fallback
+      const docNumber = completeData.document?.document_number || 
+                        completeData.document?.ncr_number || 
+                        completeData.document?.title || 
+                        completeData.document?.id || 
+                        'NCR-DOC';
+
+      // Transform to PDF format
+      const casesForPDF = completeData.cases.map((caseItem) => ({
+        ncrNumber: docNumber,
+        date: caseItem.ncr_date,
+        bagianLokasi: caseItem.location,
+        standarReferensi: caseItem.references_standard,
+        klausul: caseItem.clause,
+        uraianKetidaksesuaian: caseItem.findings?.map(f => f.description) || [],
+        kategoriTemuan: caseItem.finding_category || 'Minor',
+        auditor: caseItem.auditor_name || caseItem.auditor_username,
+        auditee: caseItem.auditee_name || caseItem.auditee_username,
+        targetPerbaikan: caseItem.target_date,
+        analisaPenyebab: caseItem.analyses?.map(a => a.description) || [],
+        koreksi: caseItem.corrections?.map(c => c.description) || [],
+        tindakanKoreksi: caseItem.corrective_actions?.map(ca => ca.description) || [],
+        verifikasiTindakan: caseItem.verification_notes ? [caseItem.verification_notes] : [],
+        auditorVerifier: caseItem.verifier_name || caseItem.auditor_name,
+        tglPenyelesaian: caseItem.completion_date || caseItem.verification_date,
+      }))
+
+      await downloadNCRDocumentWithAllCasesPDF(completeData.document, casesForPDF, {
+        filename: `laporan-ncr-${completeData.document?.document_number || ncr.id}.pdf`,
       })
+      toast.success("PDF NCR berhasil diunduh.")
     } catch (error) {
-      console.error("Gagal mengunduh PDF NCR", error)
+      console.error("Gagal mengunduh PDF NCR:", error)
+      toast.error("Gagal mengunduh PDF NCR.")
     } finally {
       setGeneratingNCRId(null)
     }
@@ -122,16 +242,18 @@ export default function NCR() {
   }
 
   const previewBuilder = useCallback(() => {
-    if (!previewNCR) return null
-    return getNCRDocumentPDFPreview(previewNCR)
+    if (!previewNCR?.document || !previewNCR?.cases) return null
+    return getNCRDocumentWithAllCasesPDFPreview(previewNCR.document, previewNCR.cases)
   }, [previewNCR])
 
   const handleSaveAdd = async (formData) => {
     try {
       await createMutation.mutateAsync(formData)
       setIsAddModalOpen(false)
+      toast.success("Dokumen NCR berhasil ditambahkan.")
     } catch (error) {
       console.error("Gagal menambah dokumen NCR:", error)
+      toast.error(error?.message || "Gagal menambah dokumen NCR.")
     }
   }
 
@@ -144,8 +266,10 @@ export default function NCR() {
       })
       setIsEditModalOpen(false)
       setSelectedNCR(null)
+      toast.success("Dokumen NCR berhasil diperbarui.")
     } catch (error) {
       console.error("Gagal mengupdate dokumen NCR:", error)
+      toast.error(error?.message || "Gagal memperbarui dokumen NCR.")
     }
   }
 
@@ -155,8 +279,10 @@ export default function NCR() {
       await deleteMutation.mutateAsync(ncrData.id)
       setIsDeleteModalOpen(false)
       setSelectedNCR(null)
+      toast.success("Dokumen NCR berhasil dihapus.")
     } catch (error) {
       console.error("Gagal menghapus dokumen NCR:", error)
+      toast.error(error?.message || "Gagal menghapus dokumen NCR.")
     }
   }
 
@@ -199,12 +325,12 @@ export default function NCR() {
             <p>Gagal memuat data NCR</p>
             <p className="text-sm mt-2">{error.message}</p>
           </div>
-        ) : pagedData.length === 0 ? (
+        ) : sortedDocuments.length === 0 ? (
           <div className="rounded-2xl border border-dashed border-gray-300 bg-white p-8 text-center text-gray-500">
             Tidak ada NCR sesuai pencarian
           </div>
         ) : (
-          pagedData.map((ncr, index) => {
+          sortedDocuments.map((ncr, index) => {
             const listNumber =
               ncr.ncr_number ||
               ncr.document_number ||
@@ -317,13 +443,13 @@ export default function NCR() {
       <PDFPreviewDialog
         open={isPreviewDialogOpen}
         onOpenChange={handlePreviewDialogChange}
-        title={`Pratinjau Laporan NCR ${previewNCR?.ncr_number || previewNCR?.id || ""}`.trim()}
+        title={`Pratinjau Laporan NCR ${previewNCR?.document?.document_number || previewNCR?.document?.id || ""}`.trim()}
         previewBuilder={previewNCR ? previewBuilder : null}
         onDownload={
-          previewNCR
+          previewNCR?.document && previewNCR?.cases
             ? () =>
-                downloadNCRDocumentPDF(previewNCR, {
-                  filename: `laporan-ncr-${previewNCR.ncr_number || previewNCR.id}.pdf`,
+                downloadNCRDocumentWithAllCasesPDF(previewNCR.document, previewNCR.cases, {
+                  filename: `laporan-ncr-${previewNCR.document.document_number || previewNCR.document.id}.pdf`,
                 })
             : null
         }

@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
+import { toast } from "sonner";
 import { useNavigate, useParams } from "react-router-dom";
 import { usePageTemplate } from "@/hooks/usePageTemplate";
 import { Button } from "@/components/ui/button";
@@ -112,8 +113,8 @@ export default function ResponsePage() {
 
   const ensureAuditeeAvailable = () => {
     if (!isAuditeeMissing) return true;
-    alert(
-      "Data auditee kasus belum tersedia. Mohon muat ulang halaman atau perbarui data kasus terlebih dahulu."
+    toast.error(
+      "Data auditee kasus belum tersedia. Muat ulang halaman atau perbarui data kasus terlebih dahulu."
     );
     return false;
   };
@@ -139,23 +140,38 @@ export default function ResponsePage() {
   }, [caseInfo, documentTitle]);
 
   const derivedVerificationData = useMemo(() => {
-    const verificationNote = caseInfo?.verification_note || caseInfo?.verificationNote;
-    const verificationDate = caseInfo?.verification_date || caseInfo?.verificationDate;
-    const verifiedByValue = caseInfo?.verified_by || caseInfo?.verifiedBy;
+    const verificationNotes =
+      caseInfo?.verification_notes ||
+      caseInfo?.verificationNotes ||
+      caseInfo?.verification_note ||
+      caseInfo?.verificationNote;
+    const verificationDate =
+      caseInfo?.verification_date ||
+      caseInfo?.verificationDate ||
+      caseInfo?.verified_at ||
+      caseInfo?.verifiedAt;
+    const completionDate =
+      caseInfo?.completion_date ||
+      caseInfo?.completionDate ||
+      caseInfo?.verified_at ||
+      caseInfo?.verifiedAt;
+    const rawVerifier =
+      caseInfo?.verifier_name ||
+      caseInfo?.verifierName ||
+      caseInfo?.verified_by ||
+      caseInfo?.verifiedBy;
     const verifierName =
-      typeof verifiedByValue === "string"
-        ? verifiedByValue
-        : verifiedByValue?.name || "";
+      typeof rawVerifier === "string" ? rawVerifier : rawVerifier?.name || "";
 
-    if (!verificationNote && !verificationDate && !verifierName) {
+    if (!verificationNotes && !verificationDate && !completionDate && !verifierName) {
       return null;
     }
 
     return {
       namaPemverifikasi: verifierName || "-",
-      tanggalPemverifikasi: formatDate(caseInfo?.verified_at || verificationDate),
+      tanggalPemverifikasi: formatDate(completionDate),
       tanggalVerifikasi: formatDate(verificationDate),
-      catatanVerifikasi: verificationNote || "-",
+      catatanVerifikasi: verificationNotes || "-",
     };
   }, [caseInfo]);
 
@@ -230,8 +246,10 @@ export default function ResponsePage() {
         },
       });
       setIsDateEditModalOpen(false);
+      toast.success("Tanggal target perbaikan diperbarui.");
     } catch (error) {
       console.error("Gagal mengupdate tanggal target:", error);
+      toast.error(error?.message || "Gagal mengupdate tanggal target.");
     }
   };
 
@@ -253,8 +271,10 @@ export default function ResponsePage() {
         auditeeId,
       });
       setIsAnalysisModalOpen(false);
+      toast.success("Analisis berhasil ditambahkan.");
     } catch (error) {
       console.error("Gagal menambah analisis:", error);
+      toast.error(error?.message || "Gagal menambah analisis.");
     }
   };
 
@@ -271,8 +291,10 @@ export default function ResponsePage() {
       });
       setIsAnalysisDeleteModalOpen(false);
       setSelectedItem(null);
+      toast.success("Analisis berhasil dihapus.");
     } catch (error) {
       console.error("Gagal menghapus analisis:", error);
+      toast.error(error?.message || "Gagal menghapus analisis.");
     }
   };
 
@@ -294,8 +316,10 @@ export default function ResponsePage() {
         auditeeId,
       });
       setIsCorrectionModalOpen(false);
+      toast.success("Koreksi berhasil ditambahkan.");
     } catch (error) {
       console.error("Gagal menambah koreksi:", error);
+      toast.error(error?.message || "Gagal menambah koreksi.");
     }
   };
 
@@ -312,8 +336,10 @@ export default function ResponsePage() {
       });
       setIsCorrectionDeleteModalOpen(false);
       setSelectedItem(null);
+      toast.success("Koreksi berhasil dihapus.");
     } catch (error) {
       console.error("Gagal menghapus koreksi:", error);
+      toast.error(error?.message || "Gagal menghapus koreksi.");
     }
   };
 
@@ -335,8 +361,10 @@ export default function ResponsePage() {
         auditeeId,
       });
       setIsCorrectiveActionModalOpen(false);
+      toast.success("Tindakan koreksi berhasil ditambahkan.");
     } catch (error) {
       console.error("Gagal menambah tindakan koreksi:", error);
+      toast.error(error?.message || "Gagal menambah tindakan koreksi.");
     }
   };
 
@@ -353,8 +381,10 @@ export default function ResponsePage() {
       });
       setIsCorrectiveActionDeleteModalOpen(false);
       setSelectedItem(null);
+      toast.success("Tindakan koreksi berhasil dihapus.");
     } catch (error) {
       console.error("Gagal menghapus tindakan koreksi:", error);
+      toast.error(error?.message || "Gagal menghapus tindakan koreksi.");
     }
   };
 
@@ -367,15 +397,23 @@ export default function ResponsePage() {
       await updateCaseMutation.mutateAsync({
         caseId: caseId,
         payload: {
-          verification_note: data.catatanVerifikasi,
-          verification_date: data.tanggalVerifikasi,
-          verified_by: data.verifiedBy,
+          verifier_name: data.namaPemverifikasi?.trim() || undefined,
+          completion_date: data.tanggalPemverifikasi || undefined,
+          verification_date: data.tanggalVerifikasi || undefined,
+          verification_notes: data.catatanVerifikasi?.trim() || undefined,
         },
       });
-      setVerificationData(data);
+      setVerificationData({
+        namaPemverifikasi: data.namaPemverifikasi || "-",
+        tanggalPemverifikasi: formatDate(data.tanggalPemverifikasi),
+        tanggalVerifikasi: formatDate(data.tanggalVerifikasi),
+        catatanVerifikasi: data.catatanVerifikasi || "-",
+      });
       setIsVerificationModalOpen(false);
+      toast.success("Verifikasi tindakan berhasil disimpan.");
     } catch (error) {
       console.error("Gagal menyimpan verifikasi:", error);
+      toast.error(error?.message || "Gagal menyimpan verifikasi.");
     }
   };
 

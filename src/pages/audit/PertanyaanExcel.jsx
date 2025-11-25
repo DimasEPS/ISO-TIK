@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { useLocation, useParams, Link, useNavigate } from "react-router-dom";
-import { ChevronRight, ChevronDown, ChevronUp } from "lucide-react";
+import { ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -18,51 +18,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { ExcelAuditTable } from "@/components/admin/audit/ExcelAuditTable";
-import { pertanyaanExcelData } from "@/mocks/excelAuditData";
-
-// Mock data untuk pertanyaan excel
-const mockExcelData = {
-  checklistTitle: "Fully Redundant Critical Systems",
-  checklistExcel: [
-    {
-      id: 1,
-      name: "Jenis Checklist excel 1",
-      expanded: true,
-      items: [
-        {
-          id: 1,
-          itemAudit: "Apakah SLA menetapkan uptime 99,995%?",
-          aspek: "Kebijakan & SLA",
-          buktiObjektif: "Dokumen SLA",
-          kesesuaian: "Ya",
-          catatanEditor: "Perlu Ada Perubahan terkait dokumen terkait",
-        },
-        {
-          id: 2,
-          itemAudit: "Apakah SLA menetapkan uptime 99,995%?",
-          aspek: "Kebijakan & SLA",
-          buktiObjektif: "Dokumen SLA",
-          kesesuaian: "Tidak",
-          catatanEditor: "Perlu Ada Perubahan terkait dokumen terkait",
-        },
-        {
-          id: 3,
-          itemAudit: "Apakah SLA menetapkan uptime 99,995%?",
-          aspek: "Kebijakan & SLA",
-          buktiObjektif: "Belum Diisi",
-          kesesuaian: "Belum Diisi",
-          catatanEditor: "Belum Diisi",
-        },
-      ],
-    },
-    {
-      id: 2,
-      name: "Jenis Checklist excel 2",
-      expanded: false,
-      items: [],
-    },
-  ],
-};
+import { toast } from "sonner";
+import {
+  useExcelChecklistsByChecklistId,
+  useExcelChecklistQuestions,
+  useExcelChecklistMetadata,
+} from "./hooks/useExcelChecklistQuestions";
+import { auditService } from "@/services/auditService";
 
 function PertanyaanExcel() {
   const { id, checklistId } = useParams();
@@ -71,28 +33,33 @@ function PertanyaanExcel() {
 
   const { dokumenTitle, lokasi, tanggalAudit, revisi, mode } =
     location.state || {};
+
+  // Step 1: Fetch excel checklists by checklist ID
+  const { data: excelChecklists = [], isLoading: isLoadingExcelChecklists } =
+    useExcelChecklistsByChecklistId(checklistId);
+
+  // Get first excel checklist (assuming one checklist has one excel checklist)
+  const excelChecklistId = excelChecklists[0]?.id;
+
+  // Step 2: Fetch excel checklist metadata and questions ONLY if we have excelChecklistId
+  const { data: excelMetadata, isLoading: isLoadingMetadata } =
+    useExcelChecklistMetadata(id, excelChecklistId);
+
+  const {
+    data: questions = [],
+    isLoading: isLoadingQuestions,
+    refetch: refetchQuestions,
+  } = useExcelChecklistQuestions(id, excelChecklistId);
+
   const [activeTab, setActiveTab] = useState("excel");
-  const [excelData, setExcelData] = useState(pertanyaanExcelData);
-  const [checklistExcel, setChecklistExcel] = useState(
-    mockExcelData.checklistExcel
-  );
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedItem, setSelectedItem] = useState(null);
+  const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     buktiObjektif: "",
     kesesuaian: "",
-    catatanEditor: "",
+    catatanAuditor: "",
   });
-
-  const toggleChecklist = (checklistId) => {
-    setChecklistExcel(
-      checklistExcel.map((checklist) =>
-        checklist.id === checklistId
-          ? { ...checklist, expanded: !checklist.expanded }
-          : checklist
-      )
-    );
-  };
 
   const handleTabChange = (tab) => {
     setActiveTab(tab);
@@ -104,55 +71,99 @@ function PertanyaanExcel() {
     }
   };
 
-  const handleOpenDialog = (item, sectionCode) => {
-    setSelectedItem({ ...item, sectionCode });
+  const handleOpenDialog = (question) => {
+    setSelectedItem(question);
+    // Map back display values to backend values for form
+    const kesesuaianValue = question.kesesuaian;
     setFormData({
-      buktiObjektif:
-        item.buktiObjektif !== "Belum Diisi" ? item.buktiObjektif : "",
-      kesesuaian: item.kesesuaian !== "Belum Diisi" ? item.kesesuaian : "",
-      catatanEditor:
-        item.catatanEditor !== "Belum Diisi" ? item.catatanEditor : "",
+      buktiObjektif: question.buktiObjektif || "",
+      kesesuaian: kesesuaianValue || "",
+      catatanAuditor: question.catatanAuditor || "",
     });
     setDialogOpen(true);
   };
 
-  const handleSimpanPerubahan = () => {
+  const handleSimpanJawaban = async () => {
     if (!selectedItem) return;
 
-    setExcelData((prev) => ({
-      ...prev,
-      sections: prev.sections.map((section) => {
-        if (section.code !== selectedItem.sectionCode) return section;
-        return {
-          ...section,
-          items: section.items.map((item) => {
-            if (item.id !== selectedItem.id) return item;
-            return {
-              ...item,
-              buktiObjektif:
-                formData.buktiObjektif.trim() !== ""
-                  ? formData.buktiObjektif
-                  : item.buktiObjektif,
-              kesesuaian:
-                formData.kesesuaian.trim() !== ""
-                  ? formData.kesesuaian
-                  : item.kesesuaian,
-              catatanEditor:
-                formData.catatanEditor.trim() !== ""
-                  ? formData.catatanEditor
-                  : item.catatanEditor,
-            };
-          }),
+    setIsSaving(true);
+    try {
+      const payload = {
+        excel_question_id: selectedItem.id,
+        document_id: id,
+        objective_evidence: formData.buktiObjektif || null,
+        auditor_note: formData.catatanAuditor || null,
+        conformity: formData.kesesuaian || null,
+      };
+
+      if (selectedItem.answerId) {
+        // Update existing answer
+        await auditService.updateExcelAnswer(selectedItem.answerId, {
+          objective_evidence: payload.objective_evidence,
+          auditor_note: payload.auditor_note,
+          conformity: payload.conformity,
+        });
+        toast.success("Jawaban berhasil diperbarui");
+      } else {
+        // Create new answer
+        await auditService.createExcelAnswer(payload);
+        toast.success("Jawaban berhasil disimpan");
+      }
+
+      // Refresh questions
+      await refetchQuestions();
+
+      setDialogOpen(false);
+      setSelectedItem(null);
+      setFormData({
+        buktiObjektif: "",
+        kesesuaian: "",
+        catatanAuditor: "",
+      });
+    } catch (error) {
+      console.error("Error saving excel answer:", error);
+      toast.error("Gagal menyimpan jawaban");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Transform questions to sections format for ExcelAuditTable
+  // Group questions by aspect
+  const excelData = {
+    sections: questions.reduce((acc, question) => {
+      const aspectName = question.aspect || "Tanpa Aspek";
+      let section = acc.find((s) => s.title === aspectName);
+
+      if (!section) {
+        section = {
+          code: aspectName.toLowerCase().replace(/\s+/g, "-"),
+          title: aspectName,
+          items: [],
         };
-      }),
-    }));
-    setDialogOpen(false);
-    setSelectedItem(null);
-    setFormData({
-      buktiObjektif: "",
-      kesesuaian: "",
-      catatanEditor: "",
-    });
+        acc.push(section);
+      }
+
+      // Map conformity: yes → Ya, no → Tidak
+      const kesesuaianDisplay =
+        question.kesesuaian === "yes"
+          ? "Ya"
+          : question.kesesuaian === "no"
+          ? "Tidak"
+          : question.kesesuaian || "Belum Diisi";
+
+      section.items.push({
+        id: question.id,
+        itemAudit: question.itemAudit || "-",
+        buktiObjektif: question.buktiObjektif || "Belum Diisi",
+        kesesuaian: kesesuaianDisplay,
+        catatanEditor: question.catatanAuditor || "Belum Diisi",
+        // Keep original question data for dialog (with original values)
+        ...question,
+      });
+
+      return acc;
+    }, []),
   };
 
   return (
@@ -217,61 +228,82 @@ function PertanyaanExcel() {
             <div>
               <p className="small text-gray-dark mb-1">Jenis Checklist</p>
               <p className="body-medium text-[#2B7FFF]">
-                {mockExcelData.checklistTitle}
+                {isLoadingExcelChecklists || isLoadingMetadata
+                  ? "Loading..."
+                  : excelMetadata?.checklistName ||
+                    excelChecklists[0]?.checklistName ||
+                    "Excel Checklist"}
               </p>
             </div>
             <div>
-              <p className="small text-gray-dark mb-1">Jenis Checklist Excel</p>
+              <p className="small text-gray-dark mb-1">Total Pertanyaan</p>
               <p className="body-medium text-[#2B7FFF]">
-                {mockExcelData.checklistExcel[0].name}
+                {isLoadingQuestions ? "Loading..." : questions.length || 0}
               </p>
             </div>
           </div>
 
+          {/* Loading State */}
+          {isLoadingExcelChecklists && (
+            <div className="text-center py-8">
+              <p className="text-gray-dark">Memuat excel checklist...</p>
+            </div>
+          )}
+
+          {!isLoadingExcelChecklists && !excelChecklistId && (
+            <div className="text-center py-8">
+              <p className="text-red-600">
+                Excel checklist tidak ditemukan untuk checklist ini.
+              </p>
+            </div>
+          )}
+
+          {!isLoadingExcelChecklists &&
+            excelChecklistId &&
+            isLoadingQuestions && (
+              <div className="text-center py-8">
+                <p className="text-gray-dark">Memuat pertanyaan...</p>
+              </div>
+            )}
+
           {/* Table Section */}
-          <ExcelAuditTable
-            data={excelData}
-            onEditClick={handleOpenDialog}
-          />
+          {!isLoadingExcelChecklists &&
+            excelChecklistId &&
+            !isLoadingQuestions && (
+              <ExcelAuditTable
+                data={excelData}
+                onEditClick={handleOpenDialog}
+              />
+            )}
         </div>
 
         {/* Navigator Sidebar */}
         <div className="w-80 shrink-0">
           <div className="border rounded-lg p-4 bg-white sticky top-6">
-            <h3 className="body-medium text-navy mb-4">
-              Navigator Checklist Excel
-            </h3>
+            <h3 className="body-medium text-navy mb-4">Navigator Aspek</h3>
 
-            <div className="space-y-2">
-              {checklistExcel.map((checklist) => (
-                <div key={checklist.id}>
-                  <button
-                    onClick={() => toggleChecklist(checklist.id)}
-                    className="w-full flex items-center justify-between p-2 hover:bg-state rounded transition-colors text-left"
-                  >
-                    <div className="flex items-center gap-2 flex-1">
-                      {checklist.expanded && (
-                        <div className="w-2 h-2 rounded-full bg-[#28A745] shrink-0" />
-                      )}
-                      <span
-                        className={`body ${
-                          checklist.expanded
-                            ? "text-navy font-medium"
-                            : "text-gray-dark"
-                        }`}
-                      >
-                        {checklist.name}
+            {isLoadingQuestions ? (
+              <p className="text-gray-dark text-sm">Memuat aspek...</p>
+            ) : (
+              <div className="space-y-2">
+                {excelData.sections.map((section) => (
+                  <div key={section.code} className="p-2 rounded bg-gray-50">
+                    <div className="flex items-center gap-2">
+                      <div className="w-2 h-2 rounded-full bg-[#28A745] shrink-0" />
+                      <span className="body text-navy font-medium">
+                        {section.title}
                       </span>
                     </div>
-                    {checklist.expanded ? (
-                      <ChevronUp className="w-4 h-4 text-gray-dark shrink-0" />
-                    ) : (
-                      <ChevronDown className="w-4 h-4 text-gray-dark shrink-0" />
-                    )}
-                  </button>
-                </div>
-              ))}
-            </div>
+                    <p className="text-sm text-gray-dark mt-1 ml-4">
+                      {section.items.length} pertanyaan
+                    </p>
+                  </div>
+                ))}
+                {excelData.sections.length === 0 && (
+                  <p className="text-gray-dark text-sm">Tidak ada pertanyaan</p>
+                )}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -303,9 +335,9 @@ function PertanyaanExcel() {
                   <p className="body text-navy">{selectedItem?.kesesuaian}</p>
                 </div>
                 <div>
-                  <p className="small text-gray-dark mb-1">Catatan Editor</p>
+                  <p className="small text-gray-dark mb-1">Catatan Auditor</p>
                   <p className="body text-navy">
-                    {selectedItem?.catatanEditor}
+                    {selectedItem?.catatanAuditor || "Belum Diisi"}
                   </p>
                 </div>
               </div>
@@ -315,9 +347,7 @@ function PertanyaanExcel() {
             <div className="space-y-4">
               <div>
                 <Label className="body-medium text-navy mb-2 block">
-                  {selectedItem?.buktiObjektif !== "Belum Diisi"
-                    ? "Bukti Objektif"
-                    : "Bukti Objektif"}
+                  Bukti Objektif
                 </Label>
                 <Input
                   value={formData.buktiObjektif}
@@ -326,6 +356,7 @@ function PertanyaanExcel() {
                   }
                   placeholder="Masukkan Bukti Objektif"
                   className="w-full"
+                  disabled={mode === "view"}
                 />
               </div>
 
@@ -338,29 +369,30 @@ function PertanyaanExcel() {
                   onValueChange={(value) =>
                     setFormData({ ...formData, kesesuaian: value })
                   }
+                  disabled={mode === "view"}
                 >
                   <SelectTrigger className="w-full">
                     <SelectValue placeholder="Pilih Kesesuaian" />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="Ya">Ya</SelectItem>
-                    <SelectItem value="Tidak">Tidak</SelectItem>
-                    <SelectItem value="Sebagian">Sebagian</SelectItem>
+                    <SelectItem value="yes">Ya</SelectItem>
+                    <SelectItem value="no">Tidak</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
 
               <div>
                 <Label className="body-medium text-navy mb-2 block">
-                  Catatan Editor
+                  Catatan Auditor
                 </Label>
                 <Input
-                  value={formData.catatanEditor}
+                  value={formData.catatanAuditor}
                   onChange={(e) =>
-                    setFormData({ ...formData, catatanEditor: e.target.value })
+                    setFormData({ ...formData, catatanAuditor: e.target.value })
                   }
-                  placeholder="Masukkan Catatan Editor"
+                  placeholder="Masukkan Catatan Auditor"
                   className="w-full"
+                  disabled={mode === "view"}
                 />
               </div>
             </div>
@@ -373,19 +405,23 @@ function PertanyaanExcel() {
                   setFormData({
                     buktiObjektif: "",
                     kesesuaian: "",
-                    catatanEditor: "",
+                    catatanAuditor: "",
                   });
                 }}
                 variant="outline"
                 className="rounded-lg"
+                disabled={isSaving}
               >
                 Batal
               </Button>
               <Button
-                onClick={handleSimpanPerubahan}
+                onClick={handleSimpanJawaban}
                 className="rounded-lg bg-navy hover:bg-navy/90 text-white"
+                disabled={isSaving}
               >
-                {selectedItem?.buktiObjektif !== "Belum Diisi"
+                {isSaving
+                  ? "Menyimpan..."
+                  : selectedItem?.answerId
                   ? "Simpan Perubahan"
                   : "Simpan Jawaban"}
               </Button>

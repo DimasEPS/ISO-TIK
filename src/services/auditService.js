@@ -221,6 +221,36 @@ export const auditService = {
       params,
     }),
 
+  /**
+   * Create new audit category (admin only)
+   * @param {Object} data - { categories_name, id_audit_aspects }
+   */
+  createCategory: (data) =>
+    apiClient("/admin/audit/categories", {
+      method: "POST",
+      data: data,
+    }),
+
+  /**
+   * Update audit category (admin only)
+   * @param {string} categoryId - UUID category
+   * @param {Object} data - { categories_name, id_audit_aspects }
+   */
+  updateCategory: (categoryId, data) =>
+    apiClient(`/admin/audit/categories/${categoryId}`, {
+      method: "PUT",
+      data: data,
+    }),
+
+  /**
+   * Delete audit category (admin only)
+   * @param {string} categoryId - UUID category
+   */
+  deleteCategory: (categoryId) =>
+    apiClient(`/admin/audit/categories/${categoryId}`, {
+      method: "DELETE",
+    }),
+
   // ========== AUDIT QUESTIONS ==========
   /**
    * Get detail audit question by ID
@@ -229,6 +259,36 @@ export const auditService = {
   getQuestion: (questionId, params = {}) =>
     apiClient(`/audit/questions/${questionId}`, {
       params,
+    }),
+
+  /**
+   * Create new audit question (admin only)
+   * @param {Object} data - { question_text, id_audit_categories }
+   */
+  createQuestion: (data) =>
+    apiClient("/admin/audit/questions", {
+      method: "POST",
+      data: data,
+    }),
+
+  /**
+   * Update audit question (admin only)
+   * @param {string} questionId - UUID question
+   * @param {Object} data - { question_text, id_audit_categories }
+   */
+  updateQuestion: (questionId, data) =>
+    apiClient(`/admin/audit/questions/${questionId}`, {
+      method: "PUT",
+      data: data,
+    }),
+
+  /**
+   * Delete audit question (admin only)
+   * @param {string} questionId - UUID question
+   */
+  deleteQuestion: (questionId) =>
+    apiClient(`/admin/audit/questions/${questionId}`, {
+      method: "DELETE",
     }),
 
   // ========== AUDIT EXCEL CHECKLISTS ==========
@@ -298,6 +358,36 @@ export const auditService = {
   getExcelQuestion: (questionId, params = {}) =>
     apiClient(`/audit/excel-questions/${questionId}`, {
       params,
+    }),
+
+  /**
+   * Create new audit excel question (admin only)
+   * @param {Object} data - { aspect, item_audit, id_audit_excel_checklists }
+   */
+  createExcelQuestion: (data) =>
+    apiClient("/admin/audit/excel-questions", {
+      method: "POST",
+      data: data,
+    }),
+
+  /**
+   * Update audit excel question (admin only)
+   * @param {string} questionId - UUID excel question
+   * @param {Object} data - { aspect, item_audit, id_audit_excel_checklists }
+   */
+  updateExcelQuestion: (questionId, data) =>
+    apiClient(`/admin/audit/excel-questions/${questionId}`, {
+      method: "PUT",
+      data: data,
+    }),
+
+  /**
+   * Delete audit excel question (admin only)
+   * @param {string} questionId - UUID excel question
+   */
+  deleteExcelQuestion: (questionId) =>
+    apiClient(`/admin/audit/excel-questions/${questionId}`, {
+      method: "DELETE",
     }),
 
   // ========== AUDIT ANSWERS ==========
