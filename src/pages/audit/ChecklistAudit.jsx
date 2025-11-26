@@ -73,6 +73,7 @@ export default function ChecklistAudit() {
     <div className="space-y-4">
       <div className="flex flex-wrap items-center gap-4">
         <SearchBar
+          className="w-[1082px]"
           placeholder="Cari checklist berdasarkan nama"
           value={searchQuery}
           onChange={(event) => setSearchQuery(event.target.value)}
