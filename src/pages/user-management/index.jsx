@@ -22,6 +22,7 @@ import {
 import { FILTER_OPTIONS, PAGINATE_OPTIONS, STATUS_STYLES } from "./constants"
 import { USER_COLUMNS as BASE_USER_COLUMNS } from "./data/index.jsx"
 import { useUsers, useCreateUser, useUpdateUser, useDeleteUser } from "@/hooks/useUserManagement"
+import { resolveUserDisplayName } from "@/lib/user-display"
 
 // Status mapping: backend (active/inactive) → frontend display (Aktif/Nonaktif)
 const STATUS_DISPLAY_MAP = {
@@ -121,6 +122,35 @@ export default function ManajemenPengguna() {
   })
 
   const users = usersResponse?.data ?? []
+  const tableUsers = useMemo(
+    () =>
+      users.map((user) => {
+        const id = user?.id ?? user?.user_id ?? user?.uuid ?? user?.username ?? user?.email
+        const fullName = resolveUserDisplayName(user, user?.username ?? user?.email ?? "-")
+        const firstName = user?.first_name ?? user?.firstName ?? ""
+        const lastName = user?.last_name ?? user?.lastName ?? ""
+
+        const normalizedRoles = Array.isArray(user?.roles)
+          ? user.roles.map((role) => {
+              if (typeof role === "string") return role
+              if (role?.name) return role.name
+              return String(role ?? "-")
+            })
+          : []
+
+        return {
+          ...user,
+          id,
+          fullName,
+          firstName,
+          lastName,
+          role: normalizedRoles[0] ?? user?.role ?? "-",
+          roles: normalizedRoles,
+          status: user?.status ?? (user?.deleted_at ? "inactive" : "active"),
+        }
+      }),
+    [users],
+  )
   const meta = usersResponse?.meta ?? {}
   const totalPages = meta.last_page ?? 1
   const totalData = meta.total ?? 0
@@ -162,7 +192,7 @@ export default function ManajemenPengguna() {
 
   const handleExportAllUsers = async () => {
     // Generate PDF untuk semua users (current page data)
-    await generateUsersListPDF(users, {
+    await generateUsersListPDF(tableUsers, {
       filename: 'daftar-pengguna.pdf',
       filters: {
         status: statusFilter !== 'Semua Status' ? statusFilter : 'Semua',
@@ -315,7 +345,7 @@ export default function ManajemenPengguna() {
             className="bg-white"
             tableClassName="min-w-[960px]"
             columns={columnsWithActions}
-            data={users}
+            data={tableUsers}
             getRowKey={(row) => row.id || row.username}
           />
 
