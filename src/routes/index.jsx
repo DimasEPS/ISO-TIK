@@ -18,7 +18,7 @@ import ResponsePage from "@/pages/ncr/ResponsePage";
 import Audit from "@/pages/audit";
 import DokumenAudit from "@/pages/audit/DokumenAudit";
 import AspekAudit from "@/pages/audit/AspekAudit";
-import ChecklistAudit from "@/pages/audit/ChekclistAudit";
+import ChecklistAudit from "@/pages/audit/ChecklistAudit";
 import ChecklistExcel from "@/pages/audit/ChecklistExcel";
 import KategoriPertanyaan from "@/pages/audit/KategoriPertanyaan";
 import PertanyaanAudit from "@/pages/audit/PertanyaanAudit";

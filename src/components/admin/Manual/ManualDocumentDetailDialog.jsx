@@ -24,6 +24,7 @@ export function ManualDocumentDetailDialog({
   const detail = data ?? {};
   const leadAuditor = detail.leadAuditor ?? [];
   const memberAuditor = detail.memberAuditor ?? [];
+  const reviewerAuditor = detail.reviewerAuditor ?? [];
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -62,7 +63,7 @@ export function ManualDocumentDetailDialog({
           <div className="space-y-1">
             <p className="text-sm text-gray-dark">Status</p>
             <span
-              className={`inline-flex items-center justify-center rounded-[4px] px-3 py-1 text-xs font-medium ${
+              className={`inline-flex items-center justify-center rounded px-3 py-1 text-xs font-medium ${
                 STATUS_STYLES[detail.status] ??
                 "bg-gray-100 text-gray-600 border border-gray-200"
               }`}
@@ -90,6 +91,17 @@ export function ManualDocumentDetailDialog({
               <li className="text-gray-dark">Belum ada Member Auditor</li>
             ) : (
               memberAuditor.map((person) => <li key={person}>{person}</li>)
+            )}
+          </ul>
+        </div>
+
+        <div className="space-y-2">
+          <p className="text-sm text-gray-dark">Reviewer</p>
+          <ul className="list-disc space-y-1 pl-5 text-navy">
+            {reviewerAuditor.length === 0 ? (
+              <li className="text-gray-dark">Belum ada Reviewer</li>
+            ) : (
+              reviewerAuditor.map((person) => <li key={person}>{person}</li>)
             )}
           </ul>
         </div>

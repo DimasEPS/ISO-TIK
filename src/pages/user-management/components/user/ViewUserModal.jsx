@@ -1,4 +1,5 @@
 import { DetailModal } from "@/pages/ncr/components/common";
+import { resolveUserDisplayName } from "@/lib/user-display";
 
 // Status mapping: API (active/inactive) → display (Aktif/Nonaktif)
 const STATUS_DISPLAY_MAP = {
@@ -13,8 +14,7 @@ const STATUS_DISPLAY_MAP = {
 export function ViewUserModal({ isOpen, onClose, user }) {
   if (!user) return null;
 
-  // Handle both API format (full_name) and legacy format (fullName/lastName)
-  const fullName = user.full_name || (user.lastName ? `${user.fullName} ${user.lastName}` : user.fullName) || "-";
+  const fullName = resolveUserDisplayName(user, user?.username ?? user?.email ?? "-");
   
   // Roles from API is array of strings, or legacy format with objects
   const roleNames = user.roles && user.roles.length > 0 
